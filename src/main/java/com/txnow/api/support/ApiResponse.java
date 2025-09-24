@@ -1,4 +1,4 @@
-package com.txnow.api.dto;
+package com.txnow.api.support;
 
 public record ApiResponse<T>(
     boolean success,
