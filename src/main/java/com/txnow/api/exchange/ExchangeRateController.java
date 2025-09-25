@@ -3,11 +3,15 @@ package com.txnow.api.exchange;
 import com.txnow.api.exchange.dto.CurrentExchangeRateResponse;
 import com.txnow.api.exchange.dto.CurrencyPairRateResponse;
 import com.txnow.api.exchange.dto.ExchangeRateChartResponse;
+import com.txnow.api.exchange.dto.ConvertExchangeRateRequest;
+import com.txnow.api.exchange.dto.ConvertExchangeRateResponse;
 import com.txnow.api.support.ApiResponse;
 import com.txnow.application.exchange.ExchangeRateService;
 import com.txnow.application.exchange.dto.CurrentExchangeRateResult;
 import com.txnow.application.exchange.dto.CurrencyPairRateResult;
 import com.txnow.application.exchange.dto.ExchangeRateChartResult;
+import com.txnow.application.exchange.dto.ConvertExchangeRateCommand;
+import com.txnow.application.exchange.dto.ConvertExchangeRateResult;
 import com.txnow.domain.exchange.model.Currency;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -17,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/exchange-rates")
@@ -88,6 +93,29 @@ public class ExchangeRateController {
         // 대상 통화를 KRW로 고정
         ExchangeRateChartResult result = exchangeRateService.getExchangeRateChart(baseCurrency, Currency.KRW, period);
         ExchangeRateChartResponse response = ExchangeRateChartResponse.from(result);
+        return ApiResponse.success(response);
+    }
+
+    @Operation(summary = "환율 변환 계산", description = "두 통화 간 금액 변환을 수행합니다.")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "환율 변환 성공"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "잘못된 요청 파라미터"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "환율 데이터 없음"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 오류")
+    })
+    @PostMapping("/convert")
+    public ApiResponse<ConvertExchangeRateResponse> convertExchangeRate(
+        @Valid @RequestBody ConvertExchangeRateRequest request
+    ) {
+        // API 요청 DTO를 Application Command로 변환
+        ConvertExchangeRateCommand command = new ConvertExchangeRateCommand(
+            request.from(),
+            request.to(),
+            request.amount()
+        );
+
+        ConvertExchangeRateResult result = exchangeRateService.convertExchangeRate(command);
+        ConvertExchangeRateResponse response = ConvertExchangeRateResponse.from(result);
         return ApiResponse.success(response);
     }
 }

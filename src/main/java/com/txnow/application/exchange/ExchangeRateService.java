@@ -5,6 +5,8 @@ import static com.txnow.application.exchange.dto.CurrentExchangeRateResult.RateI
 import com.txnow.application.exchange.dto.CurrentExchangeRateResult;
 import com.txnow.application.exchange.dto.CurrencyPairRateResult;
 import com.txnow.application.exchange.dto.ExchangeRateChartResult;
+import com.txnow.application.exchange.dto.ConvertExchangeRateCommand;
+import com.txnow.application.exchange.dto.ConvertExchangeRateResult;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.repository.ExchangeRateRepository;
 import com.txnow.infrastructure.external.bok.BokApiClient;
@@ -278,5 +280,100 @@ public class ExchangeRateService {
         } while (x.subtract(previous).abs().compareTo(new BigDecimal("0.0001")) > 0);
 
         return x.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * 환율 변환 계산을 수행합니다.
+     *
+     * @param command 변환 요청 정보 (from, to, amount)
+     * @return 변환 결과 (변환된 금액, 적용 환율 등)
+     */
+    public ConvertExchangeRateResult convertExchangeRate(ConvertExchangeRateCommand command) {
+        Currency fromCurrency = command.from();
+        Currency toCurrency = command.to();
+        BigDecimal amount = command.amount();
+
+        // 입력 검증
+        Assert.notNull(fromCurrency, "From currency is required");
+        Assert.notNull(toCurrency, "To currency is required");
+        Assert.notNull(amount, "Amount is required");
+        Assert.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Amount must be positive");
+
+        // 같은 통화간 변환은 1:1로 처리
+        if (fromCurrency == toCurrency) {
+            return new ConvertExchangeRateResult(
+                fromCurrency,
+                toCurrency,
+                amount,
+                amount,
+                BigDecimal.ONE,
+                LocalDateTime.now()
+            );
+        }
+
+        // 환율 조회 및 변환 계산
+        BigDecimal exchangeRate = getExchangeRateForConversion(fromCurrency, toCurrency);
+        BigDecimal convertedAmount = amount.multiply(exchangeRate)
+            .setScale(2, RoundingMode.HALF_UP);
+
+        return new ConvertExchangeRateResult(
+            fromCurrency,
+            toCurrency,
+            amount,
+            convertedAmount,
+            exchangeRate,
+            LocalDateTime.now()
+        );
+    }
+
+    /**
+     * 두 통화 간의 환율을 조회합니다.
+     *
+     * @param fromCurrency 기준 통화
+     * @param toCurrency 대상 통화
+     * @return 환율 (1 fromCurrency = ? toCurrency)
+     */
+    private BigDecimal getExchangeRateForConversion(Currency fromCurrency, Currency toCurrency) {
+        // 현재 환율 데이터 조회 (USD 기준)
+        var currentRates = exchangeRateRepository.findCurrentRates(Currency.USD)
+            .orElseThrow(() -> new RuntimeException("Exchange rate data not available"));
+
+        // USD를 기준으로 한 환율 정보
+        Map<Currency, BigDecimal> usdBasedRates = currentRates.rates().entrySet().stream()
+            .collect(Collectors.toMap(
+                Map.Entry::getKey,
+                entry -> entry.getValue().rate()
+            ));
+
+        // USD 자체의 환율은 1.0으로 추가
+        usdBasedRates.put(Currency.USD, BigDecimal.ONE);
+
+        // from → USD → to 경로로 환율 계산
+        BigDecimal fromToUsdRate = getUsdRate(fromCurrency, usdBasedRates);
+        BigDecimal toToUsdRate = getUsdRate(toCurrency, usdBasedRates);
+
+        // fromCurrency를 USD로 변환한 후, USD를 toCurrency로 변환
+        // 1 from = (1/fromToUsdRate) USD = (1/fromToUsdRate) * toToUsdRate to
+        BigDecimal exchangeRate = toToUsdRate.divide(fromToUsdRate, 4, RoundingMode.HALF_UP);
+
+        return exchangeRate;
+    }
+
+    /**
+     * 특정 통화의 USD 대비 환율을 구합니다.
+     *
+     * @param currency 대상 통화
+     * @param usdBasedRates USD 기준 환율 맵
+     * @return 1 USD = ? currency
+     */
+    private BigDecimal getUsdRate(Currency currency, Map<Currency, BigDecimal> usdBasedRates) {
+        if (currency == Currency.USD) {
+            return BigDecimal.ONE;
+        }
+
+        BigDecimal rate = usdBasedRates.get(currency);
+        Assert.notNull(rate, "Exchange rate not available for currency: " + currency);
+
+        return rate;
     }
 }
