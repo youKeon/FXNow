@@ -3,6 +3,7 @@ package com.txnow.application.exchange;
 import static com.txnow.application.exchange.dto.CurrentExchangeRateResult.RateInfo;
 
 import com.txnow.application.exchange.dto.CurrentExchangeRateResult;
+import com.txnow.application.exchange.dto.CurrencyPairRateResult;
 import com.txnow.application.exchange.dto.ExchangeRateChartResult;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.repository.ExchangeRateRepository;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.Assert;
 
 @Slf4j
 @Service
@@ -44,43 +46,71 @@ public class ExchangeRateService {
             .collect(Collectors.toMap(
                 entry -> entry.getKey().getCode(),
                 entry -> new RateInfo(
-                        entry.getValue().rate(),
-                        entry.getValue().change()
+                    entry.getValue().rate(),
+                    entry.getValue().change()
                 )
             ));
 
         return new CurrentExchangeRateResult(
-                currentRates.baseCurrency(),
-                currentRates.lastUpdated(),
-                rates
+            currentRates.baseCurrency(),
+            currentRates.lastUpdated(),
+            rates
         );
     }
 
-    public ExchangeRateChartResult getExchangeRateChart(Currency baseCurrency, Currency targetCurrency, String periodCode) {
+    /**
+     * 특정 통화쌍의 환율 정보를 조회합니다. 현재는 외화 → KRW 형태만 지원합니다.
+     */
+    public CurrencyPairRateResult getCurrencyPairRate(Currency fromCurrency, Currency toCurrency) {
+        // 현재는 KRW가 대상 통화인 경우만 지원
+        Assert.isTrue(toCurrency == Currency.KRW, "Currently only supports conversion to KRW");
+
+        // KRW가 기준 통화인 경우는 지원하지 않음 (외화 → KRW 전용)
+        Assert.isTrue(fromCurrency != Currency.KRW, "KRW as base currency is not supported");
+
+        // 현재 환율 데이터 조회
+        var currentRates = exchangeRateRepository.findCurrentRates(Currency.KRW)
+            .orElseThrow(
+                () -> new RuntimeException("Exchange rate data not available")
+            );
+
+        // 특정 통화의 환율 정보 추출
+        var rateData = currentRates.rates().get(fromCurrency);
+        Assert.notNull(rateData, "Exchange rate not available for currency: " + fromCurrency);
+
+        return new CurrencyPairRateResult(
+            fromCurrency,
+            toCurrency,
+            rateData.rate(),
+            rateData.change(), // 이미 %로 계산된 변동률
+            rateData.change(), // changePercent와 change가 동일 (이미 %로 계산됨)
+            currentRates.lastUpdated()
+        );
+    }
+
+    public ExchangeRateChartResult getExchangeRateChart(Currency baseCurrency,
+        Currency targetCurrency, String periodCode) {
         // targetCurrency는 항상 KRW여야 함
-        if (targetCurrency != Currency.KRW) {
-            throw new IllegalArgumentException("Target currency must be KRW");
-        }
+        Assert.isTrue(targetCurrency == Currency.KRW, "Target currency must be KRW");
         ChartPeriod period = ChartPeriod.fromCode(periodCode);
 
         // BOK API에서 baseCurrency에 대한 BOK 코드 조회 (예: USD → "0000001")
         String bokCode = BokCurrencyMapping.getBokCode(baseCurrency);
-        if (bokCode == null) {
-            throw new RuntimeException("Unsupported base currency: " + baseCurrency);
-        }
+        Assert.notNull(bokCode, "Unsupported base currency: " + baseCurrency);
 
-        log.info("Fetching chart data for {}/{} period: {}", baseCurrency, targetCurrency, periodCode);
+        log.info("Fetching chart data for {}/{} period: {}", baseCurrency, targetCurrency,
+            periodCode);
 
         // BOK API에서 히스토리 데이터 조회
         var response = bokApiClient.getExchangeRateHistory(bokCode, period);
-        if (response.isEmpty()) {
-            throw new RuntimeException("Chart data not available for " + baseCurrency + "/" + targetCurrency);
-        }
+        Assert.isTrue(response.isPresent(),
+            "Chart data not available for " + baseCurrency + "/" + targetCurrency);
 
         var statisticSearch = response.get().statisticSearch();
-        if (statisticSearch == null || statisticSearch.rows() == null || statisticSearch.rows().isEmpty()) {
-            throw new RuntimeException("Empty chart data from BOK API");
-        }
+        Assert.isTrue(
+            statisticSearch != null && statisticSearch.rows() != null && !statisticSearch.rows()
+                .isEmpty(),
+            "Empty chart data from BOK API");
 
         var rows = statisticSearch.rows();
 
@@ -130,7 +160,8 @@ public class ExchangeRateService {
         BigDecimal change = rates.size() > 1 ?
             currentRate.subtract(rates.get(1)) : BigDecimal.ZERO;
         BigDecimal changePercent = rates.size() > 1 ?
-            change.divide(rates.get(1), 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100")) : BigDecimal.ZERO;
+            change.divide(rates.get(1), 4, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+            : BigDecimal.ZERO;
 
         return new ExchangeRateChartResult(
             baseCurrency,
@@ -149,8 +180,8 @@ public class ExchangeRateService {
         // YYYYMMDD → YYYY-MM-DD 변환
         if (bokDate.length() == 8) {
             return bokDate.substring(0, 4) + "-" +
-                   bokDate.substring(4, 6) + "-" +
-                   bokDate.substring(6, 8);
+                bokDate.substring(4, 6) + "-" +
+                bokDate.substring(6, 8);
         }
         return bokDate;
     }
@@ -173,7 +204,8 @@ public class ExchangeRateService {
             .setScale(2, RoundingMode.HALF_UP);
     }
 
-    private ExchangeRateChartResult.ChartStatistics calculateChartStatistics(List<BigDecimal> rates) {
+    private ExchangeRateChartResult.ChartStatistics calculateChartStatistics(
+        List<BigDecimal> rates) {
         if (rates.isEmpty()) {
             return new ExchangeRateChartResult.ChartStatistics(
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
@@ -194,8 +226,8 @@ public class ExchangeRateService {
         // 기간 시작 대비 변동률
         BigDecimal periodChangePercent = BigDecimal.ZERO;
         if (rates.size() > 1) {
-            BigDecimal first = rates.get(rates.size() - 1); // 가장 오래된 데이터
-            BigDecimal last = rates.get(0); // 가장 최신 데이터
+            BigDecimal first = rates.getLast(); // 가장 오래된 데이터
+            BigDecimal last = rates.getFirst(); // 가장 최신 데이터
 
             if (first.compareTo(BigDecimal.ZERO) > 0) {
                 periodChangePercent = last.subtract(first)
@@ -223,7 +255,8 @@ public class ExchangeRateService {
             .map(rate -> rate.subtract(average).pow(2))
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal variance = sumSquaredDiffs.divide(new BigDecimal(rates.size() - 1), 4, RoundingMode.HALF_UP);
+        BigDecimal variance = sumSquaredDiffs.divide(new BigDecimal(rates.size() - 1), 4,
+            RoundingMode.HALF_UP);
 
         // 간단한 제곱근 계산 (Newton's method)
         return sqrt(variance);
