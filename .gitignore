@@ -27,6 +27,9 @@ replay_pid*
 *.swp
 *.swo
 *~
+cli/
+docs/
+
 
 # OS
 .DS_Store
@@ -68,4 +71,3 @@ docker-compose.override.yml
 
 # Test
 .junit/
-/.claude/
