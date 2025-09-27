@@ -2,6 +2,13 @@ export interface Currency {
   code: string;
   name: string;
   flag: string;
+  symbol?: string;
+}
+
+export interface ExchangeRate {
+  pair: string;
+  rate: number;
+  timestamp: string;
 }
 
 export interface ConversionResult {

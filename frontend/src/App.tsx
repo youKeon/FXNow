@@ -1,31 +1,38 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { Toaster } from 'react-hot-toast';
 import Header from './components/Header';
 import ConvertPage from './pages/ConvertPage';
-import ChartsPage from './pages/ChartsPage';
-import AlertsPage from './pages/AlertsPage';
 
 function App() {
   const [activeTab, setActiveTab] = useState<string>('convert');
 
-  const renderActiveTab = () => {
-    switch (activeTab) {
-      case 'convert':
-        return <ConvertPage activeTab={activeTab} onTabChange={setActiveTab} />;
-      case 'charts':
-        return <ChartsPage activeTab={activeTab} onTabChange={setActiveTab} />;
-      case 'alerts':
-        return <AlertsPage activeTab={activeTab} onTabChange={setActiveTab} />;
-      default:
-        return <ConvertPage activeTab={activeTab} onTabChange={setActiveTab} />;
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-900">
       <Header />
       <main>
-        {renderActiveTab()}
+        <ConvertPage activeTab={activeTab} onTabChange={setActiveTab} />
       </main>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            borderRadius: '8px',
+          },
+          success: {
+            style: {
+              background: '#10B981',
+            },
+          },
+          error: {
+            style: {
+              background: '#EF4444',
+            },
+          },
+        }}
+      />
     </div>
   );
 }

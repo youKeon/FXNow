@@ -44,3 +44,13 @@ body {
   outline: none;
   box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
 }
+
+/* Hide Scrollbar */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

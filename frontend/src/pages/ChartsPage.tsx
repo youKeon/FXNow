@@ -11,7 +11,7 @@ interface ChartsPageProps {
   onTabChange: (tab: string) => void;
 }
 
-const ChartsPage: React.FC<ChartsPageProps> = ({ activeTab, onTabChange }) => {
+const ChartsPage: React.FC<ChartsPageProps> = () => {
   const [fromCurrency, setFromCurrency] = useState<string>('USD');
   const [toCurrency, setToCurrency] = useState<string>('KRW');
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('1M');

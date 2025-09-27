@@ -9,7 +9,7 @@ interface AlertsPageProps {
   onTabChange: (tab: string) => void;
 }
 
-const AlertsPage: React.FC<AlertsPageProps> = ({ activeTab, onTabChange }) => {
+const AlertsPage: React.FC<AlertsPageProps> = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   const [editingAlert, setEditingAlert] = useState<Alert | null>(null);
