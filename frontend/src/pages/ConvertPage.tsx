@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { NumericFormat } from 'react-number-format';
-import toast from 'react-hot-toast';
 import { ArrowLeftRight } from 'lucide-react';
 import CurrencySelector from '../components/CurrencySelector';
 import ChartWidget from '../components/ChartWidget';
