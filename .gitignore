@@ -71,3 +71,40 @@ docker-compose.override.yml
 
 # Test
 .junit/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Dependencies
+package-lock.json.bak
+yarn.lock.bak
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Vite
+.vite/
