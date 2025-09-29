@@ -64,11 +64,11 @@ const CurrencyConverter: React.FC = () => {
       const convertedAmount = Number(currentAmount) * rate;
 
       const demoResult: ConversionResult = {
+        converted_amount: convertedAmount,
+        from: fromCurrency,
+        to: toCurrency,
         amount: Number(currentAmount),
-        fromCurrency,
-        toCurrency,
         rate,
-        convertedAmount,
         timestamp: new Date().toISOString()
       };
 
@@ -161,7 +161,7 @@ const CurrencyConverter: React.FC = () => {
               transition={{ duration: 0.3, ease: "easeOut" }}
             >
               <p className="text-sm text-gray-400 mb-2 text-center">
-                {formatNumber(result.amount)} {result.fromCurrency} =
+                {formatNumber(result.amount)} {result.from} =
               </p>
               <motion.div
                 className="text-3xl font-semibold text-white mb-3 text-center"
@@ -169,11 +169,11 @@ const CurrencyConverter: React.FC = () => {
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.2, delay: 0.1 }}
               >
-                {formatNumber(result.convertedAmount)} {result.toCurrency}
+                {result.converted_amount && !isNaN(result.converted_amount) ? formatNumber(result.converted_amount) : '0'} {result.to}
               </motion.div>
               <div className="text-center space-y-1">
                 <p className="text-sm text-gray-400">
-                  1 {result.fromCurrency} = {formatNumber(result.rate)} {result.toCurrency}
+                  1 {result.from} = {formatNumber(result.rate)} {result.to}
                 </p>
                 <p className="text-xs text-gray-500">
                   마지막 업데이트: {new Date(result.timestamp).toLocaleString('ko-KR')}

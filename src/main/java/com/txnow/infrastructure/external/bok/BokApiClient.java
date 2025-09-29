@@ -31,31 +31,28 @@ public class BokApiClient {
             .build();
     }
 
-    public Optional<BokApiResponse> getExchangeRate(String currencyCode, LocalDate startDate, LocalDate endDate) {
-        try {
-            String url = buildApiUrl(currencyCode, startDate, endDate);
-            log.info("Calling BOK API: {}", url);
+    public Optional<BokApiResponse> getExchangeRate(
+        String currencyCode,
+        LocalDate startDate,
+        LocalDate endDate
+    ) {
+        String url = buildApiUrl(currencyCode, startDate, endDate);
+        log.info("Calling BOK API: {}", url);
 
-            BokApiResponse response = webClient.get()
-                    .uri(url)
-                    .retrieve()
-                    .bodyToMono(BokApiResponse.class)
-                    .block();
+        BokApiResponse response = webClient.get()
+            .uri(url)
+            .retrieve()
+            .bodyToMono(BokApiResponse.class)
+            .block();
 
-            if (response != null && response.statisticSearch() != null) {
-                var result = response.statisticSearch().result();
-                if (result != null && !"200".equals(result.resultCode())) {
-                    log.warn("BOK API returned error: {} - {}", result.resultCode(), result.resultMessage());
-                    return Optional.empty();
-                }
+        if (response != null && response.statisticSearch() != null) {
+            var result = response.statisticSearch().result();
+            if (result != null && !"200".equals(result.resultCode())) {
+                return Optional.empty();
             }
-
-            return Optional.ofNullable(response);
-            // TODO: 에러 코드에 따른 핸들링
-        } catch (Exception e) {
-            log.error("Error calling BOK API for currency code: {}", currencyCode, e);
-            return Optional.empty();
         }
+
+        return Optional.ofNullable(response);
     }
 
     /**
@@ -78,35 +75,38 @@ public class BokApiClient {
     /**
      * 기간별 환율 히스토리 데이터
      */
-    public Optional<BokApiResponse> getExchangeRateHistory(String currencyCode, ChartPeriod period) {
+    public Optional<BokApiResponse> getExchangeRateHistory(String currencyCode,
+        ChartPeriod period) {
         LocalDate startDate = period.getStartDate();
         LocalDate endDate = period.getEndDate();
         int requiredDataCount = period.getRequiredDataCount();
 
         log.info("Requesting {} exchange rate history for period: {} ({} to {})",
-                currencyCode, period.getCode(), startDate, endDate);
+            currencyCode, period.getCode(), startDate, endDate);
 
         try {
             String url = buildApiUrl(currencyCode, startDate, endDate, requiredDataCount);
             log.info("Calling BOK API for history: {}", url);
 
             BokApiResponse response = webClient.get()
-                    .uri(url)
-                    .retrieve()
-                    .bodyToMono(BokApiResponse.class)
-                    .block();
+                .uri(url)
+                .retrieve()
+                .bodyToMono(BokApiResponse.class)
+                .block();
 
             if (response != null && response.statisticSearch() != null) {
                 var result = response.statisticSearch().result();
                 if (result != null && !"200".equals(result.resultCode())) {
-                    log.warn("BOK API returned error for history: {} - {}", result.resultCode(), result.resultMessage());
+                    log.warn("BOK API returned error for history: {} - {}", result.resultCode(),
+                        result.resultMessage());
                     return Optional.empty();
                 }
             }
 
             return Optional.ofNullable(response);
         } catch (Exception e) {
-            log.error("Error calling BOK API for currency history: {} period: {}", currencyCode, period.getCode(), e);
+            log.error("Error calling BOK API for currency history: {} period: {}", currencyCode,
+                period.getCode(), e);
             return Optional.empty();
         }
     }
@@ -115,15 +115,16 @@ public class BokApiClient {
         return buildApiUrl(currencyCode, startDate, endDate, 100);
     }
 
-    private String buildApiUrl(String currencyCode, LocalDate startDate, LocalDate endDate, int count) {
+    private String buildApiUrl(String currencyCode, LocalDate startDate, LocalDate endDate,
+        int count) {
         return String.format("/StatisticSearch/%s/json/kr/%d/%d/%s/D/%s/%s/%s",
-                apiKey,
-                1,
-                count,
-                statCode,
-                startDate.format(DATE_FORMATTER),
-                endDate.format(DATE_FORMATTER),
-                currencyCode
+            apiKey,
+            1,
+            count,
+            statCode,
+            startDate.format(DATE_FORMATTER),
+            endDate.format(DATE_FORMATTER),
+            currencyCode
         );
     }
 }

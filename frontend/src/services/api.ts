@@ -1,41 +1,51 @@
 import type { Currency, ExchangeRate, ConversionResult, ChartDataPoint } from '../types';
 
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+const API_BASE_URL = 'http://localhost:8080/api';
 
 export const api = {
-  // 환율 조회
+  // 현재 환율 조회
+  async getCurrentRates(): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/exchange-rates/current`);
+    if (!response.ok) throw new Error('Failed to fetch current rates');
+    const result = await response.json();
+    return result.data;
+  },
+
+  // 특정 통화쌍 환율 조회
   async getExchangeRate(from: string, to: string): Promise<ExchangeRate> {
-    const response = await fetch(`${API_BASE_URL}/exchange/rates?from=${from}&to=${to}`);
+    const response = await fetch(`${API_BASE_URL}/exchange-rates/${from}/${to}`);
     if (!response.ok) throw new Error('Failed to fetch exchange rate');
-    return response.json();
+    const result = await response.json();
+    return result.data;
   },
 
   // 환율 변환
   async convertCurrency(amount: number, from: string, to: string): Promise<ConversionResult> {
-    const response = await fetch(`${API_BASE_URL}/exchange/convert`, {
+    const response = await fetch(`${API_BASE_URL}/exchange-rates/convert`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ amount, fromCurrency: from, toCurrency: to }),
+      body: JSON.stringify({ from, to, amount }),
     });
     if (!response.ok) throw new Error('Failed to convert currency');
-    return response.json();
+    const result = await response.json();
+    return result.data;
   },
 
-  // 환율 히스토리
-  async getExchangeHistory(from: string, to: string, period: string): Promise<ChartDataPoint[]> {
-    const response = await fetch(`${API_BASE_URL}/exchange/history?from=${from}&to=${to}&period=${period}`);
+  // 환율 차트 데이터
+  async getExchangeHistory(baseCurrency: string, period: string): Promise<ChartDataPoint[]> {
+    const response = await fetch(`${API_BASE_URL}/exchange-rates/chart/${baseCurrency}?period=${period}`);
     if (!response.ok) throw new Error('Failed to fetch exchange history');
-    const data = await response.json();
-    return data.data;
+    const result = await response.json();
+    return result.data.chartData;
   },
 
   // 지원 통화 목록
   async getCurrencies(): Promise<Currency[]> {
-    const response = await fetch(`${API_BASE_URL}/currencies`);
+    const response = await fetch(`${API_BASE_URL}/exchange-rates/currencies`);
     if (!response.ok) throw new Error('Failed to fetch currencies');
-    const data = await response.json();
-    return data.data;
+    const result = await response.json();
+    return result.data;
   },
 };
