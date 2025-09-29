@@ -1,4 +1,9 @@
-import type { Currency, ExchangeRate, ConversionResult, ChartDataPoint } from '../types';
+import type {
+  Currency,
+  ExchangeRate,
+  ConversionResult,
+  ExchangeRateChartResponse,
+} from '../types';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -34,11 +39,11 @@ export const api = {
   },
 
   // 환율 차트 데이터
-  async getExchangeHistory(baseCurrency: string, period: string): Promise<ChartDataPoint[]> {
+  async getExchangeHistory(baseCurrency: string, period: string): Promise<ExchangeRateChartResponse> {
     const response = await fetch(`${API_BASE_URL}/exchange-rates/chart/${baseCurrency}?period=${period}`);
     if (!response.ok) throw new Error('Failed to fetch exchange history');
     const result = await response.json();
-    return result.data.chartData;
+    return result.data;
   },
 
   // 지원 통화 목록

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>FXNow Icon</title>
+  <defs>
+    <linearGradient id="fx-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="#111827" />
+  <path d="M20 22h10c3.5 0 6-2.2 6-5.5S33.5 11 30 11h-6" stroke="#f3f4f6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M44 42H34c-3.5 0-6 2.2-6 5.5S30.5 53 34 53h6" stroke="#f3f4f6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M18 32h28" stroke="url(#fx-gradient)" stroke-width="6" stroke-linecap="round" />
+</svg>

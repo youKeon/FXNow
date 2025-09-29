@@ -1,4 +1,5 @@
 import { Client } from '@stomp/stompjs';
+// @ts-ignore sockjs-client packages ship without TypeScript declarations
 import SockJS from 'sockjs-client';
 
 interface ExchangeRateUpdate {

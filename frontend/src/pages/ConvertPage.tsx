@@ -38,6 +38,8 @@ const CurrencyConverter: React.FC = () => {
   useSpecificExchangeRate(fromCurrency, toCurrency, (update) => {
     console.log('Received exchange rate update:', update);
 
+    setLastUpdate(new Date(update.timestamp).toLocaleString('ko-KR'));
+
     // 현재 금액으로 자동 계산 (유효한 값들만 처리)
     if (amount && !isNaN(Number(amount)) && Number(amount) > 0 &&
         update.rate && !isNaN(update.rate) && update.rate > 0) {
@@ -91,6 +93,7 @@ const CurrencyConverter: React.FC = () => {
           !isNaN(conversionResult.rate) &&
           isFinite(conversionResult.rate)) {
         setResult(conversionResult);
+        setLastUpdate(new Date(conversionResult.timestamp).toLocaleString('ko-KR'));
       }
     } catch (err) {
       // API 실패 시 데모 데이터 사용
@@ -120,6 +123,7 @@ const CurrencyConverter: React.FC = () => {
         };
 
         setResult(demoResult);
+        setLastUpdate(new Date().toLocaleString('ko-KR'));
       }
       setError(''); // 에러 메시지 제거
     } finally {
@@ -148,11 +152,19 @@ const CurrencyConverter: React.FC = () => {
   return (
     <>
       {/* 실시간 업데이트 상태 */}
-      {lastUpdate && (
-        <div className="mb-4 flex justify-end">
-          <span className="text-xs text-gray-500">{lastUpdate}</span>
+      <div className="mb-4 flex flex-col items-start space-y-1 text-xs sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+        <div className={`flex items-center space-x-2 ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
+          {isConnected ? (
+            <Wifi className="h-4 w-4" />
+          ) : (
+            <WifiOff className="h-4 w-4" />
+          )}
+          <span>{isConnected ? '실시간 연결됨' : '실시간 연결 끊김'}</span>
         </div>
-      )}
+        {lastUpdate && (
+          <span className="text-gray-400">마지막 업데이트: {lastUpdate}</span>
+        )}
+      </div>
 
       {/* 모바일 세로 레이아웃 */}
       <div className="space-y-4 mb-6">

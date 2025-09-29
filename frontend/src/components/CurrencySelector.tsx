@@ -8,15 +8,28 @@ interface CurrencySelectorProps {
   onChange: (currency: string) => void;
   label: string;
   className?: string;
+  currencies?: Currency[];
+  disabled?: boolean;
 }
 
-const CurrencySelector: React.FC<CurrencySelectorProps> = ({ value, onChange, label, className = '' }) => {
+const CurrencySelector: React.FC<CurrencySelectorProps> = ({
+  value,
+  onChange,
+  label,
+  className = '',
+  currencies,
+  disabled = false,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedCurrency = defaultCurrencies.find(c => c.code === value);
-  const filteredCurrencies = defaultCurrencies.filter(currency =>
+  const currencyOptions = currencies && currencies.length > 0 ? currencies : defaultCurrencies;
+
+  const selectedCurrency = currencyOptions.find(c => c.code === value)
+    ?? currencyOptions[0]
+    ?? defaultCurrencies[0];
+  const filteredCurrencies = currencyOptions.filter(currency =>
     currency.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
     currency.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -44,8 +57,16 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({ value, onChange, la
       <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-4 text-left hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200"
+        onClick={() => {
+          if (disabled) return;
+          setIsOpen(!isOpen);
+        }}
+        disabled={disabled}
+        className={`w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-4 text-left transition-all duration-200 ${
+          disabled
+            ? 'opacity-60 cursor-not-allowed'
+            : 'hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent'
+        }`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -65,7 +86,7 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({ value, onChange, la
         </div>
       </button>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <div className="absolute z-20 mt-1 w-full bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-80 overflow-hidden">
           <div className="p-3 border-b border-gray-600">
             <div className="relative">

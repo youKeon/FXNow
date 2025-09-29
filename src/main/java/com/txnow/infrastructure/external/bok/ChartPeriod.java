@@ -41,11 +41,11 @@ public enum ChartPeriod {
      */
     public int getRequiredDataCount() {
         return switch (this) {
-            case ONE_DAY -> 10;       // 하루: 10개면 충분
-            case ONE_WEEK -> 20;      // 1주: 주말 포함하여 20개
-            case ONE_MONTH -> 50;     // 1달: 주말/휴일 고려하여 50개
-            case THREE_MONTHS -> 100; // 3달: 100개
-            case ONE_YEAR -> 400;     // 1년: 365개 + 여유분
+            case ONE_DAY -> 10;
+            case ONE_WEEK -> 20;
+            case ONE_MONTH -> 50;
+            case THREE_MONTHS -> 100;
+            case ONE_YEAR -> 400;
         };
     }
 

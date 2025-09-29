@@ -1,21 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Calendar, TrendingUp, TrendingDown } from 'lucide-react';
 import CurrencySelector from '../components/CurrencySelector';
 import { api } from '../services/api';
-import { formatNumber } from '../utils/currencies';
-import type { ChartDataPoint, TimePeriod } from '../types';
+import { defaultCurrencies, formatNumber } from '../utils/currencies';
+import type { ChartDataPoint, TimePeriod, ExchangeRateChartResponse } from '../types';
 
 interface ChartsPageProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
+const supportedChartCodes = new Set(['USD', 'EUR', 'JPY', 'CNY', 'GBP']);
+
 const ChartsPage: React.FC<ChartsPageProps> = () => {
   const [fromCurrency, setFromCurrency] = useState<string>('USD');
   const [toCurrency, setToCurrency] = useState<string>('KRW');
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('1M');
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [chartMeta, setChartMeta] = useState<ExchangeRateChartResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
 
@@ -25,16 +28,61 @@ const ChartsPage: React.FC<ChartsPageProps> = () => {
     { value: '1M', label: '1개월' },
     { value: '3M', label: '3개월' },
     { value: '1Y', label: '1년' },
-    { value: '5Y', label: '5년' },
   ];
+
+  const periodCodeMap: Record<TimePeriod, string> = {
+    '1D': '1d',
+    '7D': '1w',
+    '1M': '1m',
+    '3M': '3m',
+    '1Y': '1y',
+    '5Y': '1y',
+  };
+
+  const baseCurrencyOptions = useMemo(
+    () => defaultCurrencies.filter((currency) => supportedChartCodes.has(currency.code)),
+    []
+  );
+  const targetCurrencyOptions = useMemo(
+    () => defaultCurrencies.filter((currency) => currency.code === 'KRW'),
+    []
+  );
 
   const fetchChartData = async () => {
     setIsLoading(true);
     setError('');
 
     try {
-      const data = await api.getExchangeHistory(fromCurrency, toCurrency, selectedPeriod);
-      setChartData(data);
+      if (toCurrency !== 'KRW') {
+        setError('현재 차트는 KRW 기준으로만 제공됩니다.');
+        setChartData([]);
+        setChartMeta(null);
+        return;
+      }
+
+      const periodCode = periodCodeMap[selectedPeriod] ?? '1m';
+      const response = await api.getExchangeHistory(fromCurrency, periodCode);
+
+      const normalized: ExchangeRateChartResponse = {
+        ...response,
+        currentRate: Number(response.currentRate),
+        change: Number(response.change),
+        changePercent: Number(response.changePercent),
+        chartData: response.chartData.map((point) => ({
+          date: point.date,
+          time: point.time,
+          rate: Number(point.rate),
+          dayChange: Number(point.dayChange),
+        })),
+        statistics: {
+          high: Number(response.statistics.high),
+          low: Number(response.statistics.low),
+          average: Number(response.statistics.average),
+        },
+      };
+
+      setChartMeta(normalized);
+      setChartData(normalized.chartData);
     } catch (err) {
       setError('Failed to fetch chart data. Please try again.');
       console.error('Chart data error:', err);
@@ -48,22 +96,20 @@ const ChartsPage: React.FC<ChartsPageProps> = () => {
   }, [fromCurrency, toCurrency, selectedPeriod]);
 
   const calculateChange = () => {
-    if (chartData.length < 2) return { value: 0, percentage: 0, isPositive: false };
+    if (!chartMeta) return { value: 0, percentage: 0, isPositive: false };
 
-    const first = chartData[0].rate;
-    const last = chartData[chartData.length - 1].rate;
-    const change = last - first;
-    const percentage = (change / first) * 100;
+    const changeValue = chartMeta.change;
+    const percentage = chartMeta.changePercent;
 
     return {
-      value: change,
+      value: changeValue,
       percentage: Math.abs(percentage),
-      isPositive: change >= 0,
+      isPositive: changeValue >= 0,
     };
   };
 
   const change = calculateChange();
-  const currentRate = chartData.length > 0 ? chartData[chartData.length - 1].rate : 0;
+  const currentRate = chartMeta?.currentRate ?? 0;
 
   const formatTooltipLabel = (label: string) => {
     const date = new Date(label);
@@ -106,11 +152,13 @@ const ChartsPage: React.FC<ChartsPageProps> = () => {
             value={fromCurrency}
             onChange={setFromCurrency}
             label="Base Currency"
+            currencies={baseCurrencyOptions}
           />
           <CurrencySelector
             value={toCurrency}
             onChange={setToCurrency}
             label="Quote Currency"
+            currencies={targetCurrencyOptions}
           />
         </div>
       </div>

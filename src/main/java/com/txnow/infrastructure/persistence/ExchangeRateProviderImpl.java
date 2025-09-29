@@ -27,6 +27,10 @@ public class ExchangeRateProviderImpl implements ExchangeRateProvider {
 
     @Override
     public Optional<BigDecimal> getCurrentExchangeRate(Currency currency) {
+        if (currency == Currency.KRW) {
+            return Optional.of(BigDecimal.ONE);
+        }
+
         if (!currency.isBokSupported()) {
             return Optional.empty();
         }
@@ -57,6 +61,29 @@ public class ExchangeRateProviderImpl implements ExchangeRateProvider {
 
         log.debug("Retrieved current exchange rate for {} -> KRW: {}", currency, currentRate);
         return Optional.of(currentRate);
+    }
+
+    @Override
+    public BigDecimal getExchangeRate(Currency fromCurrency, Currency toCurrency) {
+        if (fromCurrency == null || toCurrency == null) {
+            throw new IllegalArgumentException("Currencies must not be null");
+        }
+
+        if (fromCurrency == toCurrency) {
+            return BigDecimal.ONE;
+        }
+
+        BigDecimal fromRate = getCurrentExchangeRate(fromCurrency)
+            .orElseThrow(() -> new IllegalArgumentException("Exchange rate not available for currency: " + fromCurrency));
+
+        if (toCurrency == Currency.KRW) {
+            return fromRate;
+        }
+
+        BigDecimal toRate = getCurrentExchangeRate(toCurrency)
+            .orElseThrow(() -> new IllegalArgumentException("Exchange rate not available for currency: " + toCurrency));
+
+        return fromRate.divide(toRate, 6, RoundingMode.HALF_UP);
     }
 
     @Override

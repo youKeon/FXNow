@@ -34,8 +34,6 @@ public record ExchangeRateChartResult(
     public record ChartStatistics(
         BigDecimal high,
         BigDecimal low,
-        BigDecimal average,
-        BigDecimal volatility,
-        BigDecimal periodChangePercent
+        BigDecimal average
     ) {}
 }

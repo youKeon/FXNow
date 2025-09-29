@@ -31,3 +31,52 @@ export const formatNumber = (num: number): string => {
     maximumFractionDigits: 6,
   }).format(num);
 };
+
+export const formatNumberFixed = (num: number, fractionDigits = 2): string => {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+    useGrouping: true,
+  }).format(num);
+};
+
+export const formatDateTimeKST = (input: string | Date): string => {
+  const utcDate = typeof input === 'string' ? new Date(input) : input;
+  if (Number.isNaN(utcDate.getTime())) {
+    return '';
+  }
+
+  const zoned = new Date(
+    utcDate.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
+  );
+
+  const pad = (value: number) => value.toString().padStart(2, '0');
+
+  const year = zoned.getFullYear();
+  const month = pad(zoned.getMonth() + 1);
+  const day = pad(zoned.getDate());
+  const hour = pad(zoned.getHours());
+  const minute = pad(zoned.getMinutes());
+  const second = pad(zoned.getSeconds());
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second} KST`;
+};
+
+export const formatDateKST = (input: string | Date): string => {
+  const utcDate = typeof input === 'string' ? new Date(input) : input;
+  if (Number.isNaN(utcDate.getTime())) {
+    return '';
+  }
+
+  const zoned = new Date(
+    utcDate.toLocaleString('en-US', { timeZone: 'Asia/Seoul' }),
+  );
+
+  const pad = (value: number) => value.toString().padStart(2, '0');
+
+  const year = zoned.getFullYear();
+  const month = pad(zoned.getMonth() + 1);
+  const day = pad(zoned.getDate());
+
+  return `${year}-${month}-${day}`;
+};

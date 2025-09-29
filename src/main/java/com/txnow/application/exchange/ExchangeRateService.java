@@ -39,15 +39,7 @@ public class ExchangeRateService {
 
         log.info("Fetching chart data for {}/{} period: {}", baseCurrency, targetCurrency, periodCode);
 
-        // 히스토리 데이터 조회
         var response = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period);
-        Assert.isTrue(response.isPresent(),
-            "Chart data not available for " + baseCurrency + "/" + targetCurrency);
-
-        var statisticSearch = response.get().statisticSearch();
-        Assert.isTrue(
-            statisticSearch != null && statisticSearch.rows() != null && !statisticSearch.rows().isEmpty(),
-            "Empty chart data from BOK API");
 
         // 차트 생성
         return chart.createChartResult(baseCurrency, targetCurrency, periodCode, response.get());

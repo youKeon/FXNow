@@ -75,8 +75,10 @@ public class BokApiClient {
     /**
      * 기간별 환율 히스토리 데이터
      */
-    public Optional<BokApiResponse> getExchangeRateHistory(String currencyCode,
-        ChartPeriod period) {
+    public Optional<BokApiResponse> getExchangeRateHistory(
+        String currencyCode,
+        ChartPeriod period
+    ) {
         LocalDate startDate = period.getStartDate();
         LocalDate endDate = period.getEndDate();
         int requiredDataCount = period.getRequiredDataCount();

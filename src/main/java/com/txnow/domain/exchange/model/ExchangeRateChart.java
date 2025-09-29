@@ -1,16 +1,16 @@
 package com.txnow.domain.exchange.model;
 
 import com.txnow.application.exchange.dto.ExchangeRateChartResult;
+import com.txnow.application.exchange.dto.ExchangeRateChartResult.ChartStatistics;
 import com.txnow.infrastructure.external.bok.BokApiResponse;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
 
 /**
  * 환율 차트 데이터 처리 전담 도메인 객체
@@ -32,56 +32,58 @@ public class ExchangeRateChart {
     /**
      * BOK API 응답을 기반으로 환율 차트 결과를 생성합니다.
      */
-    public ExchangeRateChartResult createChartResult(Currency baseCurrency, Currency targetCurrency,
-                                                   String periodCode, BokApiResponse response) {
+    public ExchangeRateChartResult createChartResult(
+        Currency baseCurrency,
+        Currency targetCurrency,
+        String periodCode,
+        BokApiResponse response
+    ) {
+
         var statisticSearch = response.statisticSearch();
         var rows = statisticSearch.rows();
 
-        // 환율 데이터 처리
-        List<ExchangeRateChartResult.ChartDataPoint> chartData = new ArrayList<>();
-        List<BigDecimal> rates = new ArrayList<>();
+        List<RawPoint> rawPoints = new ArrayList<>();
 
         for (var row : rows) {
             BigDecimal rate = new BigDecimal(row.dataValue());
 
-            // JPY는 100엔 기준이므로 100으로 나누어 1엔당 원화로 변환
             if (baseCurrency == Currency.JPY) {
                 rate = rate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
             }
 
-            rates.add(rate);
+            rawPoints.add(new RawPoint(formatDate(row.time()), rate));
+        }
 
-            // 차트 데이터 포인트 생성
-            String dateStr = row.time(); // YYYYMMDD 형식
-            String formattedDate = formatDate(dateStr);
+        rawPoints.sort(Comparator.comparing(RawPoint::date));
 
-            // 이전 데이터와 비교하여 변동률 계산
-            BigDecimal dayChange = calculateDayChange(rates, rates.size() - 1);
+        List<ExchangeRateChartResult.ChartDataPoint> chartData = new ArrayList<>();
+        List<BigDecimal> orderedRates = new ArrayList<>();
+
+        for (int i = 0; i < rawPoints.size(); i++) {
+            RawPoint point = rawPoints.get(i);
+            orderedRates.add(point.rate());
+
+            BigDecimal dayChange = BigDecimal.ZERO;
+            if (i > 0) {
+                dayChange = calculator.calculateChangePercentage(point.rate(), rawPoints.get(i - 1).rate());
+            }
 
             chartData.add(new ExchangeRateChartResult.ChartDataPoint(
-                formattedDate,
-                null, // 일별 데이터이므로 시간은 null
-                rate,
+                point.date(),
+                null,
+                point.rate(),
                 dayChange
             ));
         }
 
-        // 차트 데이터를 시간 순서대로 정렬 (오래된 것부터)
-        chartData = chartData.stream()
-            .sorted((a, b) -> a.date().compareTo(b.date()))
-            .collect(Collectors.toList());
+        ChartStatistics statistics = calculateChartStatistics(orderedRates);
 
-        // 통계 계산
-        ExchangeRateChartResult.ChartStatistics statistics = calculateChartStatistics(rates);
-
-        // 현재 환율 (가장 최신 데이터)
-        BigDecimal currentRate = rates.get(0);
-
-        // 전일 대비 변동 계산
-        BigDecimal change = rates.size() > 1 ?
-            currentRate.subtract(rates.get(1)) : BigDecimal.ZERO;
-        BigDecimal changePercent = rates.size() > 1 ?
-            calculator.calculateChangePercentage(currentRate, rates.get(1))
+        BigDecimal currentRate = orderedRates.getLast();
+        BigDecimal change = orderedRates.size() > 1
+            ? currentRate.subtract(orderedRates.get(orderedRates.size() - 2))
+            : BigDecimal.ZERO;
+        BigDecimal changePercent = orderedRates.size() > 1
+            ? calculator.calculateChangePercentage(currentRate, orderedRates.get(orderedRates.size() - 2))
             : BigDecimal.ZERO;
 
         return new ExchangeRateChartResult(
@@ -112,93 +114,25 @@ public class ExchangeRateChart {
     /**
      * 일별 변동률 계산
      */
-    private BigDecimal calculateDayChange(List<BigDecimal> rates, int index) {
-        if (index == 0 || rates.size() <= 1) {
-            return BigDecimal.ZERO;
-        }
-
-        BigDecimal current = rates.get(index);
-        BigDecimal previous = rates.get(index - 1);
-
-        return calculator.calculateChangePercentage(current, previous);
-    }
-
-    /**
-     * 차트 통계 계산
-     */
-    private ExchangeRateChartResult.ChartStatistics calculateChartStatistics(List<BigDecimal> rates) {
+    private ChartStatistics calculateChartStatistics(List<BigDecimal> rates) {
         if (rates.isEmpty()) {
-            return new ExchangeRateChartResult.ChartStatistics(
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
+            return new ChartStatistics(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
             );
         }
 
-        // 최고값, 최저값
         BigDecimal high = rates.stream().max(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
         BigDecimal low = rates.stream().min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
 
-        // 평균값
         BigDecimal sum = rates.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal average = sum.divide(new BigDecimal(rates.size()), 4, RoundingMode.HALF_UP);
 
-        // 변동성 (표준편차 계산)
-        BigDecimal volatility = calculateStandardDeviation(rates, average);
-
-        // 기간 시작 대비 변동률
-        BigDecimal periodChangePercent = BigDecimal.ZERO;
-        if (rates.size() > 1) {
-            BigDecimal first = rates.getLast(); // 가장 오래된 데이터
-            BigDecimal last = rates.getFirst(); // 가장 최신 데이터
-
-            periodChangePercent = calculator.calculateChangePercentage(last, first);
-        }
-
-        return new ExchangeRateChartResult.ChartStatistics(
+        return new ChartStatistics(
             high,
             low,
-            average,
-            volatility,
-            periodChangePercent
+            average
         );
     }
 
-    /**
-     * 표준편차 계산
-     */
-    private BigDecimal calculateStandardDeviation(List<BigDecimal> rates, BigDecimal average) {
-        if (rates.size() <= 1) {
-            return BigDecimal.ZERO;
-        }
-
-        BigDecimal sumSquaredDiffs = rates.stream()
-            .map(rate -> rate.subtract(average).pow(2))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal variance = sumSquaredDiffs.divide(new BigDecimal(rates.size() - 1), 4,
-            RoundingMode.HALF_UP);
-
-        // 간단한 제곱근 계산 (Newton's method)
-        return sqrt(variance);
-    }
-
-    /**
-     * 제곱근 계산 (Newton's method)
-     */
-    private BigDecimal sqrt(BigDecimal value) {
-        if (value.compareTo(BigDecimal.ZERO) == 0) {
-            return BigDecimal.ZERO;
-        }
-
-        BigDecimal x = value;
-        BigDecimal previous;
-
-        // Newton's method for square root
-        do {
-            previous = x;
-            x = x.add(value.divide(x, 4, RoundingMode.HALF_UP))
-                .divide(new BigDecimal("2"), 4, RoundingMode.HALF_UP);
-        } while (x.subtract(previous).abs().compareTo(new BigDecimal("0.0001")) > 0);
-
-        return x.setScale(2, RoundingMode.HALF_UP);
-    }
+    private record RawPoint(String date, BigDecimal rate) {}
 }

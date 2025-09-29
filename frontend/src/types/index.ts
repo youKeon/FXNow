@@ -22,7 +22,27 @@ export interface ConversionResult {
 
 export interface ChartDataPoint {
   date: string;
+  time?: string | null;
   rate: number;
+  dayChange: number;
+}
+
+export interface ChartStatistics {
+  high: number;
+  low: number;
+  average: number;
+}
+
+export interface ExchangeRateChartResponse {
+  baseCurrency: string;
+  targetCurrency: string;
+  period: string;
+  currentRate: number;
+  change: number;
+  changePercent: number;
+  lastUpdated: string;
+  chartData: ChartDataPoint[];
+  statistics: ChartStatistics;
 }
 
 export type TimePeriod = '1D' | '7D' | '1M' | '3M' | '1Y' | '5Y';

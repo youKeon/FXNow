@@ -81,15 +81,7 @@ public record ExchangeRateChartResponse(
 
         @Schema(description = "기간 평균", example = "1392.85")
         @NotNull
-        BigDecimal average,
-
-        @Schema(description = "변동성 (표준편차)", example = "8.32")
-        @NotNull
-        BigDecimal volatility,
-
-        @Schema(description = "기간 시작 대비 변동률", example = "1.47")
-        @NotNull
-        BigDecimal periodChangePercent
+        BigDecimal average
     ) {}
 
     public static ExchangeRateChartResponse from(ExchangeRateChartResult result) {
@@ -105,9 +97,7 @@ public record ExchangeRateChartResponse(
         ChartStatistics statistics = new ChartStatistics(
             result.statistics().high(),
             result.statistics().low(),
-            result.statistics().average(),
-            result.statistics().volatility(),
-            result.statistics().periodChangePercent()
+            result.statistics().average()
         );
 
         return new ExchangeRateChartResponse(
