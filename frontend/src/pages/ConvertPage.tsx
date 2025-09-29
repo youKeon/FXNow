@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { NumericFormat } from 'react-number-format';
-import { ArrowLeftRight } from 'lucide-react';
+import { ArrowLeftRight, Wifi, WifiOff } from 'lucide-react';
 import CurrencySelector from '../components/CurrencySelector';
 import ChartWidget from '../components/ChartWidget';
 import AlertWidget from '../components/AlertWidget';
 import { formatNumber } from '../utils/currencies';
 import { api } from '../services/api';
+import { useWebSocket, useSpecificExchangeRate } from '../hooks/useWebSocket';
 import type { ConversionResult } from '../types';
 
 interface ConvertPageProps {
@@ -23,6 +24,9 @@ const CurrencyConverter: React.FC = () => {
   const [result, setResult] = useState<ConversionResult | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [lastUpdate, setLastUpdate] = useState<string>('');
+
+  const { isConnected } = useWebSocket();
 
   const { setValue } = useForm({
     defaultValues: {
@@ -30,9 +34,41 @@ const CurrencyConverter: React.FC = () => {
     }
   });
 
+  // 실시간 환율 업데이트 구독
+  useSpecificExchangeRate(fromCurrency, toCurrency, (update) => {
+    console.log('Received exchange rate update:', update);
+
+    // 현재 금액으로 자동 계산 (유효한 값들만 처리)
+    if (amount && !isNaN(Number(amount)) && Number(amount) > 0 &&
+        update.rate && !isNaN(update.rate) && update.rate > 0) {
+      const convertedAmount = Number(amount) * update.rate;
+
+      // 계산 결과가 유효한 경우에만 업데이트
+      if (!isNaN(convertedAmount) && isFinite(convertedAmount)) {
+        const updatedResult: ConversionResult = {
+          converted_amount: convertedAmount,
+          from: update.from,
+          to: update.to,
+          amount: Number(amount),
+          rate: update.rate,
+          timestamp: update.timestamp
+        };
+        setResult(updatedResult);
+      }
+    }
+  });
+
   const handleSwapCurrencies = () => {
-    setFromCurrency(toCurrency);
-    setToCurrency(fromCurrency);
+    const newFromCurrency = toCurrency;
+    const newToCurrency = fromCurrency;
+
+    setFromCurrency(newFromCurrency);
+    setToCurrency(newToCurrency);
+
+    // 통화 변경 즉시 새로운 환율로 계산
+    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
+      handleConvert(amount);
+    }
   };
 
   const handleConvert = async (formAmount?: string) => {
@@ -47,7 +83,15 @@ const CurrencyConverter: React.FC = () => {
 
     try {
       const conversionResult = await api.convertCurrency(Number(currentAmount), fromCurrency, toCurrency);
-      setResult(conversionResult);
+
+      // API 응답 검증
+      if (conversionResult &&
+          !isNaN(conversionResult.converted_amount) &&
+          isFinite(conversionResult.converted_amount) &&
+          !isNaN(conversionResult.rate) &&
+          isFinite(conversionResult.rate)) {
+        setResult(conversionResult);
+      }
     } catch (err) {
       // API 실패 시 데모 데이터 사용
       console.warn('API failed, using demo data:', err);
@@ -63,16 +107,20 @@ const CurrencyConverter: React.FC = () => {
       const rate = demoRates[fromCurrency]?.[toCurrency] || 1;
       const convertedAmount = Number(currentAmount) * rate;
 
-      const demoResult: ConversionResult = {
-        converted_amount: convertedAmount,
-        from: fromCurrency,
-        to: toCurrency,
-        amount: Number(currentAmount),
-        rate,
-        timestamp: new Date().toISOString()
-      };
+      // 계산 결과가 유효한 경우에만 설정
+      if (!isNaN(convertedAmount) && isFinite(convertedAmount) &&
+          !isNaN(rate) && isFinite(rate)) {
+        const demoResult: ConversionResult = {
+          converted_amount: convertedAmount,
+          from: fromCurrency,
+          to: toCurrency,
+          amount: Number(currentAmount),
+          rate,
+          timestamp: new Date().toISOString()
+        };
 
-      setResult(demoResult);
+        setResult(demoResult);
+      }
       setError(''); // 에러 메시지 제거
     } finally {
       setIsLoading(false);
@@ -99,6 +147,13 @@ const CurrencyConverter: React.FC = () => {
 
   return (
     <>
+      {/* 실시간 업데이트 상태 */}
+      {lastUpdate && (
+        <div className="mb-4 flex justify-end">
+          <span className="text-xs text-gray-500">{lastUpdate}</span>
+        </div>
+      )}
+
       {/* 모바일 세로 레이아웃 */}
       <div className="space-y-4 mb-6">
         {/* Amount */}
@@ -122,7 +177,13 @@ const CurrencyConverter: React.FC = () => {
         <div>
           <CurrencySelector
             value={fromCurrency}
-            onChange={setFromCurrency}
+            onChange={(newCurrency) => {
+              setFromCurrency(newCurrency);
+              // 통화 변경 시 즉시 계산
+              if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
+                handleConvert(amount);
+              }
+            }}
             label="From"
           />
         </div>
@@ -144,7 +205,13 @@ const CurrencyConverter: React.FC = () => {
         <div>
           <CurrencySelector
             value={toCurrency}
-            onChange={setToCurrency}
+            onChange={(newCurrency) => {
+              setToCurrency(newCurrency);
+              // 통화 변경 시 즉시 계산
+              if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
+                handleConvert(amount);
+              }
+            }}
             label="To"
           />
         </div>
@@ -169,11 +236,11 @@ const CurrencyConverter: React.FC = () => {
                 animate={{ scale: 1 }}
                 transition={{ duration: 0.2, delay: 0.1 }}
               >
-                {result.converted_amount && !isNaN(result.converted_amount) ? formatNumber(result.converted_amount) : '0'} {result.to}
+                {result.converted_amount && !isNaN(result.converted_amount) && isFinite(result.converted_amount) ? formatNumber(result.converted_amount) : '0'} {result.to}
               </motion.div>
               <div className="text-center space-y-1">
                 <p className="text-sm text-gray-400">
-                  1 {result.from} = {formatNumber(result.rate)} {result.to}
+                  1 {result.from} = {result.rate && !isNaN(result.rate) && isFinite(result.rate) ? formatNumber(result.rate) : '0'} {result.to}
                 </p>
                 <p className="text-xs text-gray-500">
                   마지막 업데이트: {new Date(result.timestamp).toLocaleString('ko-KR')}

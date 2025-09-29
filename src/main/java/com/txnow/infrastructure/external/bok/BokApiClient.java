@@ -112,6 +112,10 @@ public class BokApiClient {
     }
 
     private String buildApiUrl(String currencyCode, LocalDate startDate, LocalDate endDate) {
+        if (startDate.equals(endDate)) {
+            return buildApiUrl(currencyCode, startDate, endDate, 1);
+        }
+
         return buildApiUrl(currencyCode, startDate, endDate, 100);
     }
 

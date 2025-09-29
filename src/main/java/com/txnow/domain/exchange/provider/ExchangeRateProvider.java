@@ -21,6 +21,14 @@ public interface ExchangeRateProvider {
     Optional<BigDecimal> getCurrentExchangeRate(Currency currency);
 
     /**
+     * 두 통화 간의 환율 조회
+     * @param fromCurrency 기준 통화
+     * @param toCurrency 대상 통화
+     * @return fromCurrency 1단위당 toCurrency 환율
+     */
+    BigDecimal getExchangeRate(Currency fromCurrency, Currency toCurrency);
+
+    /**
      * 특정 통화의 히스토리 환율 데이터 조회
      * @param currency 조회할 통화
      * @param period 조회 기간

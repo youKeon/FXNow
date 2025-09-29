@@ -61,7 +61,6 @@ public class ExchangeRateController {
     public ApiResponse<ConvertExchangeRateResponse> convertExchangeRate(
         @Valid @RequestBody ConvertExchangeRateRequest request
     ) {
-        // API 요청 DTO를 Application Command로 변환
         ConvertExchangeRateCommand command = new ConvertExchangeRateCommand(
             request.from(),
             request.to(),

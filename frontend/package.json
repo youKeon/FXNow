@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",
+    "@stomp/stompjs": "^7.2.0",
     "framer-motion": "^12.23.22",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
@@ -17,7 +18,8 @@
     "react-hook-form": "^7.63.0",
     "react-hot-toast": "^2.6.0",
     "react-number-format": "^5.4.4",
-    "recharts": "^2.15.4"
+    "recharts": "^2.15.4",
+    "sockjs-client": "^1.6.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
