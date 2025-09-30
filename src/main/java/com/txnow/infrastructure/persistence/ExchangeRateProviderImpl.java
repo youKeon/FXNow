@@ -1,9 +1,9 @@
 package com.txnow.infrastructure.persistence;
 
 import com.txnow.domain.exchange.model.Currency;
+import com.txnow.domain.exchange.model.HistoricalRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.infrastructure.external.bok.BokApiClient;
-import com.txnow.infrastructure.external.bok.BokApiResponse;
 import com.txnow.infrastructure.external.bok.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +11,10 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -64,30 +68,42 @@ public class ExchangeRateProviderImpl implements ExchangeRateProvider {
     }
 
     @Override
-    public BigDecimal getExchangeRate(Currency fromCurrency, Currency toCurrency) {
+    public Optional<BigDecimal> getExchangeRate(Currency fromCurrency, Currency toCurrency) {
         if (fromCurrency == null || toCurrency == null) {
-            throw new IllegalArgumentException("Currencies must not be null");
+            log.warn("Currencies must not be null");
+            return Optional.empty();
         }
 
         if (fromCurrency == toCurrency) {
-            return BigDecimal.ONE;
+            return Optional.of(BigDecimal.ONE);
         }
 
-        BigDecimal fromRate = getCurrentExchangeRate(fromCurrency)
-            .orElseThrow(() -> new IllegalArgumentException("Exchange rate not available for currency: " + fromCurrency));
+        Optional<BigDecimal> fromRateOpt = getCurrentExchangeRate(fromCurrency);
+        if (fromRateOpt.isEmpty()) {
+            log.warn("Exchange rate not available for currency: {}", fromCurrency);
+            return Optional.empty();
+        }
+
+        BigDecimal fromRate = fromRateOpt.get();
 
         if (toCurrency == Currency.KRW) {
-            return fromRate;
+            return Optional.of(fromRate);
         }
 
-        BigDecimal toRate = getCurrentExchangeRate(toCurrency)
-            .orElseThrow(() -> new IllegalArgumentException("Exchange rate not available for currency: " + toCurrency));
+        Optional<BigDecimal> toRateOpt = getCurrentExchangeRate(toCurrency);
+        if (toRateOpt.isEmpty()) {
+            log.warn("Exchange rate not available for currency: {}", toCurrency);
+            return Optional.empty();
+        }
 
-        return fromRate.divide(toRate, 6, RoundingMode.HALF_UP);
+        BigDecimal toRate = toRateOpt.get();
+        BigDecimal exchangeRate = fromRate.divide(toRate, 6, RoundingMode.HALF_UP);
+
+        return Optional.of(exchangeRate);
     }
 
     @Override
-    public Optional<BokApiResponse> getExchangeRateHistory(Currency currency, ChartPeriod period) {
+    public Optional<List<HistoricalRate>> getExchangeRateHistory(Currency currency, ChartPeriod period) {
         if (!currency.isBokSupported()) {
             log.warn("BOK code not found for currency: {}", currency);
             return Optional.empty();
@@ -109,7 +125,36 @@ public class ExchangeRateProviderImpl implements ExchangeRateProvider {
             return Optional.empty();
         }
 
-        log.debug("Retrieved {} history data points for {}", statisticSearch.rows().size(), currency);
-        return response;
+        // BokApiResponse를 Domain 타입(HistoricalRate)으로 변환
+        List<HistoricalRate> historicalRates = new ArrayList<>();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+        for (var row : statisticSearch.rows()) {
+            try {
+                LocalDate date = LocalDate.parse(row.time(), formatter);
+                BigDecimal rate = new BigDecimal(row.dataValue());
+
+                // JPY는 100엔 기준이므로 1엔당으로 변환
+                if (currency == Currency.JPY) {
+                    rate = rate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
+                }
+
+                historicalRates.add(new HistoricalRate(date, rate));
+            } catch (Exception e) {
+                log.warn("Failed to parse history row for {}: time={}, value={}",
+                    currency, row.time(), row.dataValue(), e);
+            }
+        }
+
+        if (historicalRates.isEmpty()) {
+            log.warn("No valid history data parsed for currency: {} period: {}", currency, period);
+            return Optional.empty();
+        }
+
+        // 날짜 오름차순 정렬
+        historicalRates.sort((a, b) -> a.date().compareTo(b.date()));
+
+        log.debug("Retrieved {} history data points for {}", historicalRates.size(), currency);
+        return Optional.of(historicalRates);
     }
 }

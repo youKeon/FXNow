@@ -1,12 +1,17 @@
 package com.txnow.application.exchange;
 
+import static com.txnow.application.exchange.dto.ExchangeRateChartResult.*;
+
 import com.txnow.application.exchange.dto.ConvertExchangeRateCommand;
 import com.txnow.application.exchange.dto.ConvertExchangeRateResult;
 import com.txnow.application.exchange.dto.ExchangeRateChartResult;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.ExchangeRateCalculator;
 import com.txnow.domain.exchange.model.ExchangeRateChart;
+import com.txnow.domain.exchange.model.ExchangeRateHistory;
+import com.txnow.domain.exchange.model.HistoricalRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
+import com.txnow.domain.exchange.repository.ExchangeRateHistoryRepository;
 import com.txnow.infrastructure.external.bok.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +20,9 @@ import org.springframework.util.Assert;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -24,6 +32,7 @@ public class ExchangeRateService {
     private final ExchangeRateProvider exchangeRateProvider;
     private final ExchangeRateCalculator calculator;
     private final ExchangeRateChart chart;
+    private final ExchangeRateHistoryRepository historyRepository;
 
     /**
      * 환율 차트 데이터 조회
@@ -33,16 +42,100 @@ public class ExchangeRateService {
         Currency targetCurrency,
         String periodCode
     ) {
-        // 차트 검증
-        Assert.isTrue(chart.isValidChartTargetCurrency(targetCurrency), "Target currency must be KRW");
+        Assert.isTrue(targetCurrency == Currency.KRW, "Target currency must be KRW");
+
+        log.info("Fetching chart data for {}/{} period: {}", baseCurrency, targetCurrency,
+            periodCode);
+
+        // 1일 조회는 DB의 시간대별 데이터 사용
+        if ("1d".equals(periodCode)) {
+            return getOneDayChartFromHistory(baseCurrency, targetCurrency);
+        }
+
         ChartPeriod period = ChartPeriod.fromCode(periodCode);
-
-        log.info("Fetching chart data for {}/{} period: {}", baseCurrency, targetCurrency, periodCode);
-
-        var response = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period);
+        List<HistoricalRate> historicalRates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period)
+            .orElseThrow(() -> new IllegalStateException("Exchange rate history not available for " + baseCurrency));
 
         // 차트 생성
-        return chart.createChartResult(baseCurrency, targetCurrency, periodCode, response.get());
+        return chart.createChartResult(baseCurrency, targetCurrency, periodCode, historicalRates);
+    }
+
+    /**
+     * DB에 저장된 시간대별 환율로 1일 차트 생성
+     */
+    private ExchangeRateChartResult getOneDayChartFromHistory(
+        Currency baseCurrency,
+        Currency targetCurrency
+    ) {
+        LocalDateTime endTime = LocalDateTime.now();
+        LocalDateTime startTime = endTime.minusHours(24);
+
+        List<ExchangeRateHistory> historyList = historyRepository
+            .findByCurrencyAndTimestampBetweenOrderByTimestampAsc(baseCurrency, startTime, endTime);
+
+        // DB에 데이터가 없으면 외부 API 사용
+        if (historyList.isEmpty()) {
+            log.warn("No history data found for {} in last 24 hours, falling back to external API", baseCurrency);
+            ChartPeriod period = ChartPeriod.fromCode("1d");
+            List<HistoricalRate> historicalRates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period)
+                .orElseThrow(() -> new IllegalStateException("Exchange rate history not available for " + baseCurrency));
+            return chart.createChartResult(baseCurrency, targetCurrency, "1d", historicalRates);
+        }
+
+        // 차트 데이터 포인트 생성
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
+        List<ChartDataPoint> chartData = new ArrayList<>();
+        List<BigDecimal> rates = new ArrayList<>();
+
+        for (int i = 0; i < historyList.size(); i++) {
+            ExchangeRateHistory history = historyList.get(i);
+            rates.add(history.getRate());
+
+            BigDecimal dayChange = BigDecimal.ZERO;
+            if (i > 0) {
+                BigDecimal prevRate = historyList.get(i - 1).getRate();
+                dayChange = calculator.calculateChangePercentage(history.getRate(), prevRate);
+            }
+
+            chartData.add(new ChartDataPoint(
+                history.getTimestamp().format(dateFormatter),
+                history.getTimestamp().format(timeFormatter),
+                history.getRate(),
+                dayChange
+            ));
+        }
+
+        // 통계 계산
+        BigDecimal high = rates.stream().max(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal low = rates.stream().min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal sum = rates.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal average = sum.divide(new BigDecimal(rates.size()), 4,
+            java.math.RoundingMode.HALF_UP);
+
+        ChartStatistics statistics =
+            new ChartStatistics(high, low, average);
+
+        // 현재값 및 변동
+        BigDecimal currentRate = rates.getLast();
+        BigDecimal change = rates.size() > 1
+            ? currentRate.subtract(rates.getFirst())
+            : BigDecimal.ZERO;
+        BigDecimal changePercent = rates.size() > 1
+            ? calculator.calculateChangePercentage(currentRate, rates.getFirst())
+            : BigDecimal.ZERO;
+
+        return new ExchangeRateChartResult(
+            baseCurrency,
+            targetCurrency,
+            "1d",
+            currentRate,
+            change,
+            changePercent.setScale(2, java.math.RoundingMode.HALF_UP),
+            LocalDateTime.now(),
+            chartData,
+            statistics
+        );
     }
 
     /**
@@ -71,7 +164,8 @@ public class ExchangeRateService {
         BigDecimal exchangeRate = exchangeRateProvider.getCurrentExchangeRate(command.from())
             .orElseThrow(() -> new IllegalArgumentException("Exchange rate not available"));
 
-        BigDecimal convertedAmount = calculator.calculateConvertedAmount(command.amount(), exchangeRate);
+        BigDecimal convertedAmount = calculator.calculateConvertedAmount(command.amount(),
+            exchangeRate);
 
         return new ConvertExchangeRateResult(
             convertedAmount,
