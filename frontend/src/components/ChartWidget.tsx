@@ -1,25 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, CalendarDays } from 'lucide-react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {ArrowLeftRight} from 'lucide-react';
 import {
-  LineChart,
+  CartesianGrid,
   Line,
+  LineChart,
+  ReferenceDot,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceDot,
 } from 'recharts';
 import CurrencySelector from './CurrencySelector';
 import DatePicker from './DatePicker';
-import { api } from '../services/api';
+import {api} from '../services/api';
 import {
   defaultCurrencies,
-  formatNumberFixed,
-  formatDateTimeKST,
   formatDateKST,
+  formatDateTimeKST,
+  formatNumberFixed,
 } from '../utils/currencies';
-import type { ExchangeRateChartResponse } from '../types';
+import type {ExchangeRateChartResponse} from '../types';
 
 interface ChartPoint {
   date: string;
@@ -40,7 +40,7 @@ const periodOptions = [
   { value: '1m', label: '1개월', request: '1m' },
   { value: '3m', label: '3개월', request: '3m' },
   { value: '1y', label: '1년', request: '1y' },
-] as const;
+];
 
 const periodRequestMap = periodOptions.reduce<Record<string, string>>((acc, option) => {
   acc[option.value] = option.request;
@@ -60,7 +60,6 @@ const ChartWidget: React.FC = () => {
   const [lowRecord, setLowRecord] = useState<ChartPoint | null>(null);
   const [statistics, setStatistics] = useState<{ high: number; average: number; low: number } | null>(null);
   const [chartMeta, setChartMeta] = useState<ExchangeRateChartResponse | null>(null);
-  const [isRangePickerOpen, setIsRangePickerOpen] = useState(false);
   const [customRange, setCustomRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
 
   const fromOptions = useMemo(
@@ -256,14 +255,6 @@ const ChartWidget: React.FC = () => {
     setHoverPoint(null);
   }, []);
 
-
-
-  const handleRangeReset = () => {
-    setCustomRange({ start: '', end: '' });
-    setSelectedPeriod('1w');
-    setIsRangePickerOpen(false);
-  };
-
   const change = chartMeta ? chartMeta.change : null;
   const changePercent = chartMeta ? chartMeta.changePercent : null;
   const currentRate = chartMeta ? chartMeta.currentRate : null;
@@ -282,7 +273,7 @@ const ChartWidget: React.FC = () => {
       <div className="space-y-6">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
                 <CurrencySelector
                     value={fromCurrency}
@@ -296,7 +287,7 @@ const ChartWidget: React.FC = () => {
                   aria-label="통화 전환"
                   title="현재 차트는 KRW 기준으로만 제공됩니다"
                   disabled
-                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-700 border border-gray-600 text-gray-400 flex items-center justify-center cursor-not-allowed self-center"
+                  className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gray-700 border border-gray-600 text-gray-400 flex items-center justify-center cursor-not-allowed sm:mt-6"
               >
                 <ArrowLeftRight className="h-5 w-5" />
               </button>
@@ -311,12 +302,9 @@ const ChartWidget: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium text-gray-300">조회 기간</span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
+            <div className="rounded-lg border border-gray-700 bg-gray-800 p-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+                <span className="text-sm font-medium text-gray-300 sm:min-w-[70px]">조회 기간</span>
                 <div
                     className="inline-flex flex-wrap items-center gap-1 rounded-full bg-gray-700 p-1"
                     role="tablist"
@@ -374,12 +362,9 @@ const ChartWidget: React.FC = () => {
                     );
                   })}
                 </div>
-              </div>
 
-              <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-4 rounded-lg border border-gray-600 bg-gray-700/60 p-4 h-20">
-                <div className="flex items-center gap-2 w-full sm:w-auto h-full">
-                  <label className="text-xs text-gray-300 min-w-[40px]">시작일</label>
-                  <div className="flex-1 sm:min-w-[180px]">
+                <div className="flex items-center gap-3">
+                  <div className="min-w-[180px]">
                     <DatePicker
                         value={customRange.start}
                         onChange={(date) => {
@@ -392,10 +377,8 @@ const ChartWidget: React.FC = () => {
                         placeholder=""
                     />
                   </div>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto h-full">
-                  <label className="text-xs text-gray-300 min-w-[40px]">종료일</label>
-                  <div className="flex-1 sm:min-w-[180px]">
+                  <span className="text-gray-400">~</span>
+                  <div className="min-w-[180px]">
                     <DatePicker
                         value={customRange.end}
                         onChange={(date) => {

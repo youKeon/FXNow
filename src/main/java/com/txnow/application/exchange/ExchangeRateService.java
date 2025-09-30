@@ -61,7 +61,11 @@ public class ExchangeRateService {
 
         // 동일 통화 처리
         if (fromCurrency.equals(toCurrency)) {
-            return new ConvertExchangeRateResult(command.amount(), LocalDateTime.now());
+            return new ConvertExchangeRateResult(
+                command.amount(),
+                BigDecimal.ONE,
+                LocalDateTime.now()
+            );
         }
 
         BigDecimal exchangeRate = exchangeRateProvider.getCurrentExchangeRate(command.from())
@@ -69,6 +73,10 @@ public class ExchangeRateService {
 
         BigDecimal convertedAmount = calculator.calculateConvertedAmount(command.amount(), exchangeRate);
 
-        return new ConvertExchangeRateResult(convertedAmount, LocalDateTime.now());
+        return new ConvertExchangeRateResult(
+            convertedAmount,
+            exchangeRate,
+            LocalDateTime.now()
+        );
     }
 }

@@ -65,7 +65,7 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
         className={`w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-4 text-left transition-all duration-200 ${
           disabled
             ? 'opacity-60 cursor-not-allowed'
-            : 'hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent'
+            : 'hover:border-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400'
         }`}
       >
         <div className="flex items-center justify-between">
@@ -96,7 +96,7 @@ const CurrencySelector: React.FC<CurrencySelectorProps> = ({
                 placeholder="통화 검색..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 text-white rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
               />
             </div>
           </div>
