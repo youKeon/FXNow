@@ -10,10 +10,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-/**
- * 환율 이력 엔티티
- * 30분 단위로 환율 데이터를 저장하여 시간대별 차트 조회를 지원합니다.
- */
 @Entity
 @Table(name = "exchange_rate_history")
 @Getter
@@ -40,7 +36,7 @@ public class ExchangeRateHistory {
     /**
      * 전일 대비 변동폭
      */
-    @Column(nullable = false, precision = 19, scale = 4)
+    @Column(name = "change_amount", nullable = false, precision = 19, scale = 4)
     private BigDecimal change;
 
     /**
