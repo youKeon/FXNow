@@ -1,14 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { NumericFormat } from 'react-number-format';
-import { ArrowLeftRight, Wifi, WifiOff, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowLeftRight, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
 import CurrencySelector from '../components/CurrencySelector';
 import ChartWidget from '../components/ChartWidget';
 import AlertWidget from '../components/AlertWidget';
 import { formatNumber } from '../utils/currencies';
 import { api } from '../services/api';
-import { useWebSocket, useSpecificExchangeRate } from '../hooks/useWebSocket';
 import type { ConversionResult } from '../types';
 
 interface ConvertPageProps {
@@ -26,39 +25,11 @@ const CurrencyConverter: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [lastUpdate, setLastUpdate] = useState<string>('');
   const [previousRate, setPreviousRate] = useState<number | null>(null);
-
-  const { isConnected } = useWebSocket();
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const { setValue } = useForm({
     defaultValues: {
       amount: '1.00'
-    }
-  });
-
-  // 실시간 환율 업데이트 구독
-  useSpecificExchangeRate(fromCurrency, toCurrency, (update) => {
-    console.log('Received exchange rate update:', update);
-
-    setLastUpdate(new Date(update.timestamp).toLocaleString('ko-KR'));
-
-    // 현재 금액으로 자동 계산 (유효한 값들만 처리)
-    if (amount && !isNaN(Number(amount)) && Number(amount) > 0 &&
-        update.rate && !isNaN(update.rate) && update.rate > 0) {
-      const convertedAmount = Number(amount) * update.rate;
-
-      // 계산 결과가 유효한 경우에만 업데이트
-      if (!isNaN(convertedAmount) && isFinite(convertedAmount)) {
-        setPreviousRate(result?.rate || null);
-        const updatedResult: ConversionResult = {
-          converted_amount: convertedAmount,
-          from: update.from,
-          to: update.to,
-          amount: Number(amount),
-          rate: update.rate,
-          timestamp: update.timestamp
-        };
-        setResult(updatedResult);
-      }
     }
   });
 
@@ -165,7 +136,7 @@ const CurrencyConverter: React.FC = () => {
   }, []);
 
   // 디바운스 타이머
-  const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  const [debounceTimer, setDebounceTimer] = useState<number | null>(null);
 
   const handleAmountChange = (values: any) => {
     const { value } = values;
@@ -217,22 +188,23 @@ const CurrencyConverter: React.FC = () => {
     };
   }, [debounceTimer]);
 
+  const handleRefresh = async (e?: React.MouseEvent) => {
+    // 이벤트 전파 방지 (부모의 handleSwapCurrencies 실행 막기)
+    if (e) {
+      e.stopPropagation();
+    }
+
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    await handleConvert(amount);
+    setIsRefreshing(false);
+  };
+
   return (
     <>
-      {/* 실시간 업데이트 상태 */}
-      <div className="mb-6 flex flex-col items-start space-y-1 text-xs sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-        <div className={`flex items-center space-x-2 ${isConnected ? 'text-green-400' : 'text-red-400'}`}>
-          {isConnected ? (
-            <Wifi className="h-4 w-4" />
-          ) : (
-            <WifiOff className="h-4 w-4" />
-          )}
-          <span>{isConnected ? '실시간 연결됨' : '실시간 연결 끊김'}</span>
-        </div>
-        {lastUpdate && (
-          <span className="text-gray-400">마지막 업데이트: {lastUpdate}</span>
-        )}
-      </div>
 
       {/* 변환 입력 카드 */}
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-6 mb-6 space-y-5">
@@ -325,14 +297,30 @@ const CurrencyConverter: React.FC = () => {
               <p className="text-sm text-gray-400 mb-2 text-center">
                 {amount && Number(amount) > 0 && result ? formatNumber(result.amount) : '0'} {fromCurrency} =
               </p>
-              <motion.div
-                className="text-4xl font-bold text-white mb-3 text-center"
-                initial={{ scale: 0.95 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.2, delay: 0.1 }}
-              >
-                {amount && Number(amount) > 0 && result?.converted_amount && !isNaN(result.converted_amount) && isFinite(result.converted_amount) ? formatNumber(result.converted_amount) : '0'} <span className="text-red-400">{toCurrency}</span>
-              </motion.div>
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <motion.div
+                  className="text-4xl font-bold text-white text-center"
+                  initial={{ scale: 0.95 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.2, delay: 0.1 }}
+                >
+                  {amount && Number(amount) > 0 && result?.converted_amount && !isNaN(result.converted_amount) && isFinite(result.converted_amount) ? formatNumber(result.converted_amount) : '0'} <span className="text-red-400">{toCurrency}</span>
+                </motion.div>
+                <motion.button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing || isLoading}
+                  whileHover={{ scale: isRefreshing ? 1 : 1.1 }}
+                  whileTap={{ scale: isRefreshing ? 1 : 0.9 }}
+                  className={`p-2 rounded-full transition-colors duration-200 ${
+                    isRefreshing || isLoading
+                      ? 'text-gray-500 cursor-not-allowed'
+                      : 'text-green-400 hover:text-green-300 hover:bg-gray-700'
+                  }`}
+                  aria-label="최신 환율 조회"
+                >
+                  <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                </motion.button>
+              </div>
               <div className="text-center space-y-1">
                 <div className="flex items-center justify-center gap-2">
                   <p className="text-sm text-gray-400">
