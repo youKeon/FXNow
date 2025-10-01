@@ -8,18 +8,14 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
-/**
- * 환율 차트 데이터 처리 전담 도메인 객체
- * 차트 데이터 구성, 통계 계산, 차트 검증 로직을 담당합니다.
- */
-@Component
-@RequiredArgsConstructor
 public class ExchangeRateChart {
 
     private final ExchangeRateCalculator calculator;
+
+    public ExchangeRateChart(ExchangeRateCalculator calculator) {
+        this.calculator = calculator;
+    }
 
     /**
      * 히스토리 환율 데이터를 기반으로 환율 차트 결과를 생성합니다.

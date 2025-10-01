@@ -1,4 +1,4 @@
-package com.txnow.infrastructure.external.bok;
+package com.txnow.domain.exchange.model;
 
 import java.time.LocalDate;
 

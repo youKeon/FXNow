@@ -2,15 +2,7 @@ package com.txnow.domain.exchange.model;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 
-/**
- * 환율 계산 전담 도메인 객체
- * 환율 계산, 검증, 결과 생성까지 담당합니다.
- */
-@Component
-@RequiredArgsConstructor
 public class ExchangeRateCalculator {
 
     /**

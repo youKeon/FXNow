@@ -7,7 +7,7 @@ import com.txnow.domain.exchange.model.ExchangeRateHistory;
 import com.txnow.domain.exchange.model.HistoricalRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.domain.exchange.repository.ExchangeRateHistoryRepository;
-import com.txnow.infrastructure.external.bok.ChartPeriod;
+import com.txnow.domain.exchange.model.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -82,38 +82,33 @@ public class DatabaseExchangeRateProvider implements ExchangeRateProvider {
         LocalDateTime startOfDay = LocalDateTime.now().toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1);
 
-        return historyRepository
-            .findByCurrencyAndTimestampBetweenOrderByTimestampDesc(currency, startOfDay, endOfDay)
-            .stream()
-            .findFirst()
-            .map(ExchangeRateHistory::getRate)
-            .orElse(null);
+        ExchangeRateHistory latest = historyRepository
+            .findLatestByCurrencyAndTimestampBetween(currency, startOfDay, endOfDay);
+
+        return latest != null ? latest.getRate() : null;
     }
 
     /**
      * DB에 환율 저장 (히스토리 테이블)
      */
     private void saveToDatabase(Currency currency, BigDecimal rate) {
-        try {
-            var history = historyRepository.findByCurrencyAndTimestampBetweenOrderByTimestampDesc(
+        ExchangeRateHistory recentHistory = historyRepository
+            .findLatestByCurrencyAndTimestampBetween(
                 currency,
                 LocalDateTime.now().minusMinutes(5),
                 LocalDateTime.now()
-            ).stream().findFirst();
+            );
 
-            // 최근 5분 내 데이터가 없으면 저장
-            if (history.isEmpty()) {
-                var newHistory = ExchangeRateHistory.builder()
-                    .currency(currency)
-                    .rate(rate)
-                    .change(BigDecimal.ZERO)
-                    .timestamp(LocalDateTime.now())
-                    .build();
-                historyRepository.save(newHistory);
-                log.debug("Saved to DB: {} = {}", currency, rate);
-            }
-        } catch (Exception e) {
-            log.error("Failed to save to DB: {}", currency, e);
+        // 최근 5분 내 데이터가 없으면 저장
+        if (recentHistory == null) {
+            var newHistory = ExchangeRateHistory.builder()
+                .currency(currency)
+                .rate(rate)
+                .change(BigDecimal.ZERO)
+                .timestamp(LocalDateTime.now())
+                .build();
+            historyRepository.save(newHistory);
+            log.debug("Saved to DB: {} = {}", currency, rate);
         }
     }
 }

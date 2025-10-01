@@ -1,13 +1,14 @@
 package com.txnow.infrastructure.external.bok;
 
+import com.txnow.domain.exchange.exception.ExchangeRateUnavailableException;
+import com.txnow.domain.exchange.model.ChartPeriod;
+import com.txnow.domain.exchange.model.Currency;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.Optional;
 
 @Slf4j
 @Component
@@ -18,77 +19,34 @@ public class BokApiClient {
     private final String apiKey;
     private final String statCode;
     private final WebClient webClient;
+    private final BokApiRateLimiter rateLimiter;
 
     public BokApiClient(
         @Value("${bok.api.base-url}") String baseUrl,
         @Value("${bok.api.key}") String apiKey,
-        @Value("${bok.api.stat-code}") String statCode
+        @Value("${bok.api.stat-code}") String statCode,
+        BokApiRateLimiter rateLimiter
     ) {
         this.apiKey = apiKey;
         this.statCode = statCode;
+        this.rateLimiter = rateLimiter;
         this.webClient = WebClient.builder()
             .baseUrl(baseUrl)
             .build();
     }
 
-    public Optional<BokApiResponse> getExchangeRate(
+    public BokApiResponse getExchangeRate(
         String currencyCode,
         LocalDate startDate,
         LocalDate endDate
     ) {
-        String url = buildApiUrl(currencyCode, startDate, endDate);
-        log.info("Calling BOK API: {}", url);
-
-        BokApiResponse response = webClient.get()
-            .uri(url)
-            .retrieve()
-            .bodyToMono(BokApiResponse.class)
-            .block();
-
-        if (response != null && response.statisticSearch() != null) {
-            var result = response.statisticSearch().result();
-            if (result != null && !"200".equals(result.resultCode())) {
-                return Optional.empty();
-            }
-        }
-
-        return Optional.ofNullable(response);
-    }
-
-    /**
-     * 오늘 날짜의 환율 데이터를 조회합니다.
-     */
-    public Optional<BokApiResponse> getTodayExchangeRate(String currencyCode) {
-        LocalDate today = LocalDate.now();
-        return getExchangeRate(currencyCode, today, today);
-    }
-
-    /**
-     * 최근 7일간의 환율 데이터
-     */
-    public Optional<BokApiResponse> getRecentExchangeRate(String currencyCode) {
-        LocalDate today = LocalDate.now();
-        LocalDate weekAgo = today.minusDays(7);
-        return getExchangeRate(currencyCode, weekAgo, today);
-    }
-
-    /**
-     * 기간별 환율 히스토리 데이터
-     */
-    public Optional<BokApiResponse> getExchangeRateHistory(
-        String currencyCode,
-        ChartPeriod period
-    ) {
-        LocalDate startDate = period.getStartDate();
-        LocalDate endDate = period.getEndDate();
-        int requiredDataCount = period.getRequiredDataCount();
-
-        log.info("Requesting {} exchange rate history for period: {} ({} to {})",
-            currencyCode, period.getCode(), startDate, endDate);
-
         try {
-            String url = buildApiUrl(currencyCode, startDate, endDate, requiredDataCount);
-            log.info("Calling BOK API for history: {}", url);
+            // Rate limit 확인 및 대기
+            rateLimiter.acquirePermit();
+
+            String url = buildApiUrl(currencyCode, startDate, endDate);
+            log.info("Calling BOK API: {} (Recent calls: {})",
+                url, rateLimiter.getCurrentCallCount());
 
             BokApiResponse response = webClient.get()
                 .uri(url)
@@ -99,17 +57,72 @@ public class BokApiClient {
             if (response != null && response.statisticSearch() != null) {
                 var result = response.statisticSearch().result();
                 if (result != null && !"200".equals(result.resultCode())) {
-                    log.warn("BOK API returned error for history: {} - {}", result.resultCode(),
-                        result.resultMessage());
-                    return Optional.empty();
+                    throw new ExchangeRateUnavailableException(Currency.valueOf(currencyCode),
+                        "No data received from BOK API");
                 }
             }
 
-            return Optional.ofNullable(response);
-        } catch (Exception e) {
-            log.error("Error calling BOK API for currency history: {} period: {}", currencyCode,
-                period.getCode(), e);
-            return Optional.empty();
+            return response;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ExchangeRateUnavailableException(Currency.valueOf(currencyCode),
+                "BOK API rate limit exceeded");
+        }
+    }
+
+    /**
+     * 오늘 날짜의 환율 데이터를 조회합니다.
+     */
+    public BokApiResponse getTodayExchangeRate(String currencyCode) {
+        LocalDate today = LocalDate.now();
+        return getExchangeRate(currencyCode, today, today);
+    }
+
+    /**
+     * 최근 7일간의 환율 데이터
+     */
+    public BokApiResponse getRecentExchangeRate(String currencyCode) {
+        LocalDate today = LocalDate.now();
+        LocalDate weekAgo = today.minusDays(7);
+        return getExchangeRate(currencyCode, weekAgo, today);
+    }
+
+    /**
+     * 기간별 환율 히스토리 데이터
+     */
+    public BokApiResponse getExchangeRateHistory(
+        String currencyCode,
+        ChartPeriod period
+    ) {
+        LocalDate startDate = period.getStartDate();
+        LocalDate endDate = period.getEndDate();
+        int requiredDataCount = period.getRequiredDataCount();
+
+        try {
+            // Rate limit 확인 및 대기
+            rateLimiter.acquirePermit();
+
+            String url = buildApiUrl(currencyCode, startDate, endDate, requiredDataCount);
+
+            BokApiResponse response = webClient.get()
+                .uri(url)
+                .retrieve()
+                .bodyToMono(BokApiResponse.class)
+                .block();
+
+            if (response != null && response.statisticSearch() != null) {
+                var result = response.statisticSearch().result();
+                if (result != null && !"200".equals(result.resultCode())) {
+                    throw new ExchangeRateUnavailableException(Currency.valueOf(currencyCode),
+                        "BOK API rate limit exceeded");
+                }
+            }
+
+            return response;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new ExchangeRateUnavailableException(Currency.valueOf(currencyCode),
+                "BOK API rate limit exceeded");
         }
     }
 

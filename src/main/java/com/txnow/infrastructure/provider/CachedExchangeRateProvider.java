@@ -4,7 +4,7 @@ import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.HistoricalRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.infrastructure.cache.CacheKeyGenerator;
-import com.txnow.infrastructure.external.bok.ChartPeriod;
+import com.txnow.domain.exchange.model.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -80,18 +80,14 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
      * Redis에서 환율 조회
      */
     private BigDecimal getFromRedisCache(Currency currency) {
-        try {
-            String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
-            Object cached = redisTemplate.opsForValue().get(cacheKey);
-            if (cached != null) {
-                if (cached instanceof BigDecimal) {
-                    return (BigDecimal) cached;
-                } else if (cached instanceof Number) {
-                    return new BigDecimal(cached.toString());
-                }
+        String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
+        Object cached = redisTemplate.opsForValue().get(cacheKey);
+        if (cached != null) {
+            if (cached instanceof BigDecimal) {
+                return (BigDecimal) cached;
+            } else if (cached instanceof Number) {
+                return new BigDecimal(cached.toString());
             }
-        } catch (Exception e) {
-            log.error("Redis error while fetching {}: {}", currency, e.getMessage());
         }
         return null;
     }
@@ -100,16 +96,12 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
      * Redis에 환율 저장 (24시간 TTL)
      */
     private void saveToRedisCache(Currency currency, BigDecimal rate) {
-        try {
-            String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
-            redisTemplate.opsForValue().set(cacheKey, rate, 24, TimeUnit.HOURS);
-            log.debug("Saved to Redis: {} = {}", currency, rate);
+        String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
+        redisTemplate.opsForValue().set(cacheKey, rate, 24, TimeUnit.HOURS);
+        log.debug("Saved to Redis: {} = {}", currency, rate);
 
-            // Stale 데이터도 저장 (Fallback용, 7일 TTL)
-            String staleKey = cacheKeyGenerator.staleDataKey(currency.name());
-            redisTemplate.opsForValue().set(staleKey, rate, 7, TimeUnit.DAYS);
-        } catch (Exception e) {
-            log.error("Failed to save to Redis: {}", currency, e);
-        }
+        // Stale 데이터도 저장 (Fallback용, 7일 TTL)
+        String staleKey = cacheKeyGenerator.staleDataKey(currency.name());
+        redisTemplate.opsForValue().set(staleKey, rate, 7, TimeUnit.DAYS);
     }
 }

@@ -44,7 +44,6 @@ public class ExchangeRateController {
         @Pattern(regexp = "^(1d|1w|1m|3m|1y)$", message = "Period must be one of: 1d, 1w, 1m, 3m, 1y")
         String period
     ) {
-        // 대상 통화를 KRW로 고정
         ExchangeRateChartResult result = exchangeRateService.getExchangeRateChart(baseCurrency, Currency.KRW, period);
         ExchangeRateChartResponse response = ExchangeRateChartResponse.from(result);
         return ApiResponse.success(response);

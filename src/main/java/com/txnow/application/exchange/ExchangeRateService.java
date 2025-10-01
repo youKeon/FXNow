@@ -12,7 +12,7 @@ import com.txnow.domain.exchange.model.ExchangeRateHistory;
 import com.txnow.domain.exchange.model.HistoricalRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.domain.exchange.repository.ExchangeRateHistoryRepository;
-import com.txnow.infrastructure.external.bok.ChartPeriod;
+import com.txnow.domain.exchange.model.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -70,7 +70,7 @@ public class ExchangeRateService {
         LocalDateTime startTime = endTime.minusHours(24);
 
         List<ExchangeRateHistory> historyList = historyRepository
-            .findByCurrencyAndTimestampBetweenOrderByTimestampAsc(baseCurrency, startTime, endTime);
+            .findByCurrencyAndTimestampBetween(baseCurrency, startTime, endTime);
 
         // DB에 데이터가 없으면 외부 API 사용
         if (historyList.isEmpty()) {

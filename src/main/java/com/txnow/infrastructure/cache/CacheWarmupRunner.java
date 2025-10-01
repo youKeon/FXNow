@@ -2,7 +2,7 @@ package com.txnow.infrastructure.cache;
 
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
-import com.txnow.infrastructure.external.bok.ChartPeriod;
+import com.txnow.domain.exchange.model.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -32,7 +32,7 @@ public class CacheWarmupRunner implements ApplicationRunner {
     );
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void run(ApplicationArguments args) throws Exception {
         log.info("========================================");
         log.info("Starting cache warmup...");
         log.info("========================================");
@@ -55,59 +55,40 @@ public class CacheWarmupRunner implements ApplicationRunner {
     /**
      * 주요 통화 환율 워밍업
      */
-    private void warmupExchangeRates() {
+    private void warmupExchangeRates() throws InterruptedException {
         log.info("Warming up exchange rates...");
-        int successCount = 0;
-        int failCount = 0;
 
         for (Currency currency : MAJOR_CURRENCIES) {
-            try {
-                BigDecimal rate = exchangeRateProvider.getCurrentExchangeRate(currency);
-                log.debug("Warmed up: {} = {}", currency, rate);
-                successCount++;
+            BigDecimal rate = exchangeRateProvider.getCurrentExchangeRate(currency);
+            log.debug("Warmed up: {} = {}", currency, rate);
 
-                // Rate Limit 방지
-                Thread.sleep(100);
-
-            } catch (Exception e) {
-                log.error("Failed to warmup exchange rate for {}: {}", currency, e.getMessage());
-                failCount++;
-            }
+            // Rate Limit 방지
+            Thread.sleep(100);
         }
 
-        log.info("Exchange rates warmup: Success={}, Failed={}", successCount, failCount);
+        log.info("Exchange rates warmup completed");
     }
 
     /**
      * 인기 차트 데이터 워밍업
      */
-    private void warmupChartData() {
+    private void warmupChartData() throws InterruptedException {
         log.info("Warming up chart data...");
-        int successCount = 0;
-        int failCount = 0;
 
         // USD와 EUR만 차트 워밍업 (가장 많이 조회되는 통화)
         List<Currency> chartCurrencies = List.of(Currency.USD, Currency.EUR);
 
         for (Currency currency : chartCurrencies) {
             for (ChartPeriod period : CHART_PERIODS) {
-                try {
-                    var chartData = exchangeRateProvider.getExchangeRateHistory(currency, period);
-                    log.debug("Warmed up chart: {} - {} ({} points)",
-                            currency, period.getCode(), chartData.size());
-                    successCount++;
+                var chartData = exchangeRateProvider.getExchangeRateHistory(currency, period);
+                log.debug("Warmed up chart: {} - {} ({} points)",
+                        currency, period.getCode(), chartData.size());
 
-                    // Rate Limit 방지: 요청 간 200ms 대기
-                    Thread.sleep(200);
-
-                } catch (Exception e) {
-                    log.error("Failed to warmup chart for {} - {}: {}",
-                            currency, period.getCode(), e.getMessage());
-                    failCount++;
-                }
+                // Rate Limit 방지: 요청 간 200ms 대기
+                Thread.sleep(200);
             }
         }
 
-        log.info("Chart data warmup: Success={}, Failed={}", successCount, failCount);
+        log.info("Chart data warmup completed");
     }
 }

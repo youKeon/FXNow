@@ -1,52 +1,28 @@
 package com.txnow.domain.exchange.model;
 
-import jakarta.persistence.*;
-import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-@Entity
-@Table(name = "exchange_rate_history")
+/**
+ * 환율 이력 Domain Entity (Pure POJO)
+ * JPA 의존성 없이 순수 비즈니스 로직만 포함
+ */
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ExchangeRateHistory {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    /**
-     * 통화 코드 (USD, EUR, JPY 등)
-     */
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private Currency currency;
-
-    /**
-     * 환율 (1 통화당 KRW)
-     */
-    @Column(nullable = false, precision = 19, scale = 4)
-    private BigDecimal rate;
-
-    /**
-     * 전일 대비 변동폭
-     */
-    @Column(name = "change_amount", nullable = false, precision = 19, scale = 4)
-    private BigDecimal change;
-
-    /**
-     * 환율 기록 시각
-     */
-    @Column(nullable = false)
-    private LocalDateTime timestamp;
+    private final Long id;
+    private final Currency currency;
+    private final BigDecimal rate;
+    private final BigDecimal change;
+    private final LocalDateTime timestamp;
 
     @Builder
-    public ExchangeRateHistory(Currency currency, BigDecimal rate, BigDecimal change, LocalDateTime timestamp) {
+    public ExchangeRateHistory(Long id, Currency currency, BigDecimal rate,
+                               BigDecimal change, LocalDateTime timestamp) {
         Objects.requireNonNull(currency, "Currency cannot be null");
         Objects.requireNonNull(rate, "Rate cannot be null");
         Objects.requireNonNull(change, "Change cannot be null");
@@ -56,12 +32,16 @@ public class ExchangeRateHistory {
             throw new IllegalArgumentException("Exchange rate must be positive");
         }
 
+        this.id = id;
         this.currency = currency;
         this.rate = rate;
         this.change = change;
         this.timestamp = timestamp;
     }
 
+    /**
+     * CurrentExchangeRate로부터 ExchangeRateHistory 생성
+     */
     public static ExchangeRateHistory from(CurrentExchangeRate current) {
         return ExchangeRateHistory.builder()
             .currency(current.currency())
