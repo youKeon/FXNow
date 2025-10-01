@@ -48,6 +48,17 @@ const periodRequestMap = periodOptions.reduce<Record<string, string>>((acc, opti
 }, { custom: '1y' });
 
 const ChartWidget: React.FC = () => {
+  // 초기 날짜 범위 계산 (1주일 전 ~ 오늘)
+  const getInitialDateRange = () => {
+    const now = new Date();
+    const startDate = new Date();
+    startDate.setDate(now.getDate() - 7);
+    return {
+      start: startDate.toISOString().split('T')[0],
+      end: now.toISOString().split('T')[0]
+    };
+  };
+
   const [fromCurrency, setFromCurrency] = useState<string>('USD');
   const [toCurrency, setToCurrency] = useState<string>(targetCurrencyCode);
   const [selectedPeriod, setSelectedPeriod] = useState<string>('1w');
@@ -60,7 +71,7 @@ const ChartWidget: React.FC = () => {
   const [lowRecord, setLowRecord] = useState<ChartPoint | null>(null);
   const [statistics, setStatistics] = useState<{ high: number; average: number; low: number } | null>(null);
   const [chartMeta, setChartMeta] = useState<ExchangeRateChartResponse | null>(null);
-  const [customRange, setCustomRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
+  const [customRange, setCustomRange] = useState<{ start: string; end: string }>(getInitialDateRange());
 
   const fromOptions = useMemo(
       () => defaultCurrencies.filter((currency) => supportedFromCodes.has(currency.code)),
