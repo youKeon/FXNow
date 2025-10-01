@@ -46,14 +46,13 @@ public class ExchangeRateUpdateScheduler {
             Currency fromCurrency = Currency.valueOf(fromCode);
             Currency toCurrency = Currency.valueOf(toCode);
 
-            exchangeRateProvider.getExchangeRate(fromCurrency, toCurrency)
-                .ifPresentOrElse(
-                    rate -> {
-                        broadcastService.broadcastExchangeRateUpdate(fromCode, toCode, rate);
-                        log.debug("Updated exchange rate: {} -> {} = {}", fromCode, toCode, rate);
-                    },
-                    () -> log.warn("Failed to get exchange rate for {} -> {}", fromCode, toCode)
-                );
+            try {
+                BigDecimal rate = exchangeRateProvider.getExchangeRate(fromCurrency, toCurrency);
+                broadcastService.broadcastExchangeRateUpdate(fromCode, toCode, rate);
+                log.debug("Updated exchange rate: {} -> {} = {}", fromCode, toCode, rate);
+            } catch (Exception e) {
+                log.warn("Failed to get exchange rate for {} -> {}: {}", fromCode, toCode, e.getMessage());
+            }
         }
 
         log.debug("Completed scheduled exchange rate update");
@@ -77,28 +76,26 @@ public class ExchangeRateUpdateScheduler {
         LocalDateTime now = LocalDateTime.now();
 
         for (Currency currency : majorCurrencies) {
-            // 현재 환율 조회
-            BigDecimal currentRate = exchangeRateProvider.getCurrentExchangeRate(currency)
-                .orElse(null);
+            try {
+                // 현재 환율 조회
+                BigDecimal currentRate = exchangeRateProvider.getCurrentExchangeRate(currency);
 
-            if (currentRate == null) {
-                log.warn("Failed to get current rate for {}, skipping", currency);
-                continue;
+                // 변동폭 계산 (임시로 0으로 설정, 추후 개선 가능)
+                BigDecimal change = BigDecimal.ZERO;
+
+                // 히스토리 엔티티 생성 및 저장
+                CurrentExchangeRate current = new CurrentExchangeRate(
+                    currency,
+                    currentRate,
+                    change,
+                    now
+                );
+
+                ExchangeRateHistory history = ExchangeRateHistory.from(current);
+                historyRepository.save(history);
+            } catch (Exception e) {
+                log.warn("Failed to get current rate for {}, skipping: {}", currency, e.getMessage());
             }
-
-            // 변동폭 계산 (임시로 0으로 설정, 추후 개선 가능)
-            BigDecimal change = BigDecimal.ZERO;
-
-            // 히스토리 엔티티 생성 및 저장
-            CurrentExchangeRate current = new CurrentExchangeRate(
-                currency,
-                currentRate,
-                change,
-                now
-            );
-
-            ExchangeRateHistory history = ExchangeRateHistory.from(current);
-            historyRepository.save(history);
         }
     }
 }

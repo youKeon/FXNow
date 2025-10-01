@@ -53,8 +53,7 @@ public class ExchangeRateService {
         }
 
         ChartPeriod period = ChartPeriod.fromCode(periodCode);
-        List<HistoricalRate> historicalRates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period)
-            .orElseThrow(() -> new IllegalStateException("Exchange rate history not available for " + baseCurrency));
+        List<HistoricalRate> historicalRates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period);
 
         // 차트 생성
         return chart.createChartResult(baseCurrency, targetCurrency, periodCode, historicalRates);
@@ -77,8 +76,7 @@ public class ExchangeRateService {
         if (historyList.isEmpty()) {
             log.warn("No history data found for {} in last 24 hours, falling back to external API", baseCurrency);
             ChartPeriod period = ChartPeriod.fromCode("1d");
-            List<HistoricalRate> historicalRates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period)
-                .orElseThrow(() -> new IllegalStateException("Exchange rate history not available for " + baseCurrency));
+            List<HistoricalRate> historicalRates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period);
             return chart.createChartResult(baseCurrency, targetCurrency, "1d", historicalRates);
         }
 
@@ -161,11 +159,9 @@ public class ExchangeRateService {
             );
         }
 
-        BigDecimal exchangeRate = exchangeRateProvider.getCurrentExchangeRate(command.from())
-            .orElseThrow(() -> new IllegalArgumentException("Exchange rate not available"));
+        BigDecimal exchangeRate = exchangeRateProvider.getCurrentExchangeRate(command.from());
 
-        BigDecimal convertedAmount = calculator.calculateConvertedAmount(command.amount(),
-            exchangeRate);
+        BigDecimal convertedAmount = calculator.calculateConvertedAmount(command.amount(), exchangeRate);
 
         return new ConvertExchangeRateResult(
             convertedAmount,
