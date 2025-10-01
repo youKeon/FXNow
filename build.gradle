@@ -25,8 +25,12 @@ dependencies {
     // Spring Data JPA
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 
-    // Database Driver (H2 for development)
-    runtimeOnly 'com.h2database:h2'
+    // Database
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // Cache
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
 
     // HTTP Client
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
