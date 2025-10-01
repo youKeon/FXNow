@@ -1,5 +1,7 @@
-package com.txnow.infrastructure.persistence;
+package com.txnow.infrastructure.provider;
 
+import com.txnow.domain.exchange.exception.ExchangeRateNotFoundException;
+import com.txnow.domain.exchange.exception.ExchangeRateUnavailableException;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.HistoricalRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
@@ -15,43 +17,38 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * 환율 제공자 구현체
- * Infrastructure Layer에서 Domain의 ExchangeRateProvider 인터페이스를 구현
- * BOK API를 직접 호출하여 환율 데이터를 제공합니다.
+ * BOK(한국은행) API를 통한 환율 데이터 제공
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
-@Slf4j
-public class ExchangeRateProviderImpl implements ExchangeRateProvider {
+public class BokApiExchangeRateProvider implements ExchangeRateProvider {
 
     private final BokApiClient bokApiClient;
 
     @Override
-    public Optional<BigDecimal> getCurrentExchangeRate(Currency currency) {
+    public BigDecimal getCurrentExchangeRate(Currency currency) {
         if (currency == Currency.KRW) {
-            return Optional.of(BigDecimal.ONE);
+            return BigDecimal.ONE;
         }
 
         if (!currency.isBokSupported()) {
-            return Optional.empty();
+            throw new ExchangeRateNotFoundException(currency, "Currency not supported by BOK API");
         }
 
         String bokCode = currency.getBokCode();
+        log.info("Fetching current rate from BOK API: {}", currency);
 
         var response = bokApiClient.getTodayExchangeRate(bokCode);
-
         if (response.isEmpty()) {
-            log.warn("No exchange rate data received for currency: {}", currency);
-            return Optional.empty();
+            throw new ExchangeRateUnavailableException(currency, "No data received from BOK API");
         }
 
         var statisticSearch = response.get().statisticSearch();
         if (statisticSearch == null || statisticSearch.rows() == null || statisticSearch.rows().isEmpty()) {
-            log.warn("Empty exchange rate data for currency: {}", currency);
-            return Optional.empty();
+            throw new ExchangeRateNotFoundException(currency, "Empty data from BOK API");
         }
 
         // 최신 데이터 (첫 번째 row)
@@ -63,66 +60,47 @@ public class ExchangeRateProviderImpl implements ExchangeRateProvider {
             currentRate = currentRate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
         }
 
-        log.debug("Retrieved current exchange rate for {} -> KRW: {}", currency, currentRate);
-        return Optional.of(currentRate);
+        log.info("Fetched rate from BOK API: {} = {}", currency, currentRate);
+        return currentRate;
     }
 
     @Override
-    public Optional<BigDecimal> getExchangeRate(Currency fromCurrency, Currency toCurrency) {
+    public BigDecimal getExchangeRate(Currency fromCurrency, Currency toCurrency) {
         if (fromCurrency == null || toCurrency == null) {
-            log.warn("Currencies must not be null");
-            return Optional.empty();
+            throw new IllegalArgumentException("Currencies must not be null");
         }
 
         if (fromCurrency == toCurrency) {
-            return Optional.of(BigDecimal.ONE);
+            return BigDecimal.ONE;
         }
 
-        Optional<BigDecimal> fromRateOpt = getCurrentExchangeRate(fromCurrency);
-        if (fromRateOpt.isEmpty()) {
-            log.warn("Exchange rate not available for currency: {}", fromCurrency);
-            return Optional.empty();
-        }
-
-        BigDecimal fromRate = fromRateOpt.get();
+        BigDecimal fromRate = getCurrentExchangeRate(fromCurrency);
 
         if (toCurrency == Currency.KRW) {
-            return Optional.of(fromRate);
+            return fromRate;
         }
 
-        Optional<BigDecimal> toRateOpt = getCurrentExchangeRate(toCurrency);
-        if (toRateOpt.isEmpty()) {
-            log.warn("Exchange rate not available for currency: {}", toCurrency);
-            return Optional.empty();
-        }
-
-        BigDecimal toRate = toRateOpt.get();
-        BigDecimal exchangeRate = fromRate.divide(toRate, 6, RoundingMode.HALF_UP);
-
-        return Optional.of(exchangeRate);
+        BigDecimal toRate = getCurrentExchangeRate(toCurrency);
+        return fromRate.divide(toRate, 6, RoundingMode.HALF_UP);
     }
 
     @Override
-    public Optional<List<HistoricalRate>> getExchangeRateHistory(Currency currency, ChartPeriod period) {
+    public List<HistoricalRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
         if (!currency.isBokSupported()) {
-            log.warn("BOK code not found for currency: {}", currency);
-            return Optional.empty();
+            throw new ExchangeRateNotFoundException(currency, "BOK code not found for currency");
         }
 
         String bokCode = currency.getBokCode();
-
-        log.info("Fetching history data for {} period: {}", currency, period);
+        log.info("Fetching history from BOK API: {} period: {}", currency, period);
 
         var response = bokApiClient.getExchangeRateHistory(bokCode, period);
         if (response.isEmpty()) {
-            log.warn("No history data received for currency: {} period: {}", currency, period);
-            return Optional.empty();
+            throw new ExchangeRateUnavailableException(currency, "No history data received from BOK API");
         }
 
         var statisticSearch = response.get().statisticSearch();
         if (statisticSearch == null || statisticSearch.rows() == null || statisticSearch.rows().isEmpty()) {
-            log.warn("Empty history data for currency: {} period: {}", currency, period);
-            return Optional.empty();
+            throw new ExchangeRateNotFoundException(currency, "Empty history data from BOK API");
         }
 
         // BokApiResponse를 Domain 타입(HistoricalRate)으로 변환
@@ -147,14 +125,13 @@ public class ExchangeRateProviderImpl implements ExchangeRateProvider {
         }
 
         if (historicalRates.isEmpty()) {
-            log.warn("No valid history data parsed for currency: {} period: {}", currency, period);
-            return Optional.empty();
+            throw new ExchangeRateNotFoundException(currency, "No valid history data parsed");
         }
 
         // 날짜 오름차순 정렬
         historicalRates.sort((a, b) -> a.date().compareTo(b.date()));
 
-        log.debug("Retrieved {} history data points for {}", historicalRates.size(), currency);
-        return Optional.of(historicalRates);
+        log.info("Fetched {} history data points from BOK API: {}", historicalRates.size(), currency);
+        return historicalRates;
     }
 }
