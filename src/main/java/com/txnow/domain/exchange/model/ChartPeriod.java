@@ -37,16 +37,31 @@ public enum ChartPeriod {
     }
 
     /**
-     * 필요한 데이터 개수 계산 (주말 고려)
+     * 필요한 데이터 개수 계산 (주말 및 공휴일 고려)
      */
     public int getRequiredDataCount() {
-        return switch (this) {
-            case ONE_DAY -> 10;
-            case ONE_WEEK -> 20;
-            case ONE_MONTH -> 50;
-            case THREE_MONTHS -> 100;
-            case ONE_YEAR -> 400;
-        };
+        LocalDate startDate = getStartDate();
+        LocalDate endDate = getEndDate();
+
+        // 주말 제외 계산
+        long businessDays = 0;
+        LocalDate current = startDate;
+        while (!current.isAfter(endDate)) {
+            if (current.getDayOfWeek().getValue() <= 5) { // 월~금
+                businessDays++;
+            }
+            current = current.plusDays(1);
+        }
+
+        // 공휴일은 대략 영업일의 10% 정도로 추정 (한국 공휴일 약 15일/년)
+        long estimatedHolidays = (long) (businessDays * 0.1);
+        long estimatedBusinessDays = businessDays - estimatedHolidays;
+
+        // 20% 여유분 추가 (API 호출 실패 방지)
+        int resultCount = (int) Math.ceil(estimatedBusinessDays * 1.2);
+
+        // 최소 1개, 최대 100개로 제한
+        return Math.max(1, Math.min(100, resultCount));
     }
 
     public static ChartPeriod fromCode(String code) {

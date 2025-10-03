@@ -38,16 +38,4 @@ public class ExchangeRateHistory {
         this.change = change;
         this.timestamp = timestamp;
     }
-
-    /**
-     * CurrentExchangeRate로부터 ExchangeRateHistory 생성
-     */
-    public static ExchangeRateHistory from(CurrentExchangeRate current) {
-        return ExchangeRateHistory.builder()
-            .currency(current.currency())
-            .rate(current.rate())
-            .change(current.change())
-            .timestamp(current.lastUpdated())
-            .build();
-    }
 }

@@ -12,14 +12,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.core.RedisTemplate;
 
-/**
- * ExchangeRateProvider Decorator Chain 설정
- *
- * 구조:
- * CachedExchangeRateProvider (L1: Redis)
- *   → DatabaseExchangeRateProvider (L2: DB)
- *     → BokApiExchangeRateProvider (L3: API)
- */
 @Configuration
 @RequiredArgsConstructor
 public class ExchangeRateProviderConfig {
@@ -29,16 +21,27 @@ public class ExchangeRateProviderConfig {
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheKeyGenerator cacheKeyGenerator;
 
+    /**
+     * L2 Cache: Database
+     */
     @Bean
-    @Primary
-    public ExchangeRateProvider exchangeRateProvider() {
-        ExchangeRateProvider dbProvider = new DatabaseExchangeRateProvider(
+    public DatabaseExchangeRateProvider databaseExchangeRateProvider() {
+        return new DatabaseExchangeRateProvider(
             bokApiProvider,
             historyRepository
         );
+    }
 
+    /**
+     * L1 Cache: Redis
+     */
+    @Bean
+    @Primary
+    public ExchangeRateProvider exchangeRateProvider(
+        DatabaseExchangeRateProvider databaseProvider
+    ) {
         return new CachedExchangeRateProvider(
-            dbProvider,
+            databaseProvider,
             redisTemplate,
             cacheKeyGenerator
         );

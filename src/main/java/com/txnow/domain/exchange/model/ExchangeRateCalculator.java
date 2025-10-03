@@ -3,7 +3,14 @@ package com.txnow.domain.exchange.model;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-public class ExchangeRateCalculator {
+/**
+ * 환율 계산 유틸리티 클래스
+ */
+public final class ExchangeRateCalculator {
+
+    private ExchangeRateCalculator() {
+        throw new UnsupportedOperationException("Utility class cannot be instantiated");
+    }
 
     /**
      * 금액과 환율을 기반으로 변환된 금액을 계산합니다.
@@ -11,7 +18,7 @@ public class ExchangeRateCalculator {
      * @param exchangeRate 적용할 환율
      * @return 변환된 금액 (소수점 둘째 자리 반올림)
      */
-    public BigDecimal calculateConvertedAmount(BigDecimal amount, BigDecimal exchangeRate) {
+    public static BigDecimal calculateConvertedAmount(BigDecimal amount, BigDecimal exchangeRate) {
         return amount.multiply(exchangeRate).setScale(2, RoundingMode.HALF_UP);
     }
 
@@ -21,7 +28,7 @@ public class ExchangeRateCalculator {
      * @param previousRate 이전 환율
      * @return 변동률 (백분율)
      */
-    public BigDecimal calculateChangePercentage(BigDecimal currentRate, BigDecimal previousRate) {
+    public static BigDecimal calculateChangePercentage(BigDecimal currentRate, BigDecimal previousRate) {
         if (previousRate.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }

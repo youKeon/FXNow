@@ -28,7 +28,7 @@ public interface ExchangeRateHistoryRepository {
      * @param endTime 종료 시각
      * @return 가장 최근 환율 (없으면 null)
      */
-    ExchangeRateHistory findLatestByCurrencyAndTimestampBetween(
+    ExchangeRateHistory findExchangeRateByTimestamp(
         Currency currency,
         LocalDateTime startTime,
         LocalDateTime endTime
