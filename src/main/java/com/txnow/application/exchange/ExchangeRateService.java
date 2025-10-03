@@ -4,6 +4,8 @@ import static com.txnow.application.exchange.dto.ExchangeResult.ExchangeChartRes
 import static com.txnow.application.exchange.dto.ExchangeResult.ExchangeConvertResult;
 
 import com.txnow.application.exchange.dto.ExchangeCommand;
+import com.txnow.domain.exchange.exception.InvalidAmountException;
+import com.txnow.domain.exchange.exception.InvalidCurrencyException;
 import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.DailyRate;
@@ -15,7 +17,6 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.util.Assert;
 
 @Slf4j
 @Service
@@ -33,9 +34,15 @@ public class ExchangeRateService {
         Currency baseCurrency = command.baseCurrency();
         Currency targetCurrency = command.targetCurrency();
 
-        Assert.notNull(baseCurrency, "Base currency is required");
-        Assert.notNull(targetCurrency, "Target currency is required");
-        Assert.isTrue(targetCurrency == Currency.KRW, "Target currency must be KRW");
+        if (baseCurrency == null) {
+            throw new InvalidCurrencyException(null, "Base currency is required");
+        }
+        if (targetCurrency == null) {
+            throw new InvalidCurrencyException(null, "Target currency is required");
+        }
+        if (targetCurrency != Currency.KRW) {
+            throw new InvalidCurrencyException(targetCurrency, "Target currency must be KRW");
+        }
 
         ChartPeriod period = ChartPeriod.fromCode(periodCode);
         List<DailyRate> rates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period);
@@ -51,10 +58,18 @@ public class ExchangeRateService {
         Currency toCurrency = command.to();
         BigDecimal amount = command.amount();
 
-        Assert.notNull(fromCurrency, "From currency is required");
-        Assert.notNull(toCurrency, "To currency is required");
-        Assert.notNull(amount, "Amount is required");
-        Assert.isTrue(amount.compareTo(BigDecimal.ZERO) > 0, "Amount must be positive");
+        if (fromCurrency == null) {
+            throw new InvalidCurrencyException(null, "From currency is required");
+        }
+        if (toCurrency == null) {
+            throw new InvalidCurrencyException(null, "To currency is required");
+        }
+        if (amount == null) {
+            throw new InvalidAmountException(null, "Amount is required");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidAmountException(amount, "Amount must be positive");
+        }
 
         // 동일 통화 처리
         if (fromCurrency.equals(toCurrency)) {
