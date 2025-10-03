@@ -12,7 +12,7 @@ export interface ExchangeRate {
 }
 
 export interface ConversionResult {
-  converted_amount: number;
+  convertedAmount: number;
   from: string;
   to: string;
   amount: number;

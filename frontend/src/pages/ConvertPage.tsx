@@ -62,7 +62,7 @@ const CurrencyConverter: React.FC = () => {
 
       // API 응답에 요청 정보 추가
       const conversionResult: ConversionResult = {
-        converted_amount: apiResponse.converted_amount,
+        convertedAmount: apiResponse.convertedAmount,
         rate: apiResponse.rate,
         timestamp: apiResponse.timestamp,
         from: fromCurrency,
@@ -72,8 +72,8 @@ const CurrencyConverter: React.FC = () => {
 
       // API 응답 검증
       if (conversionResult &&
-          !isNaN(conversionResult.converted_amount) &&
-          isFinite(conversionResult.converted_amount) &&
+          !isNaN(conversionResult.convertedAmount) &&
+          isFinite(conversionResult.convertedAmount) &&
           !isNaN(conversionResult.rate) &&
           isFinite(conversionResult.rate)) {
         setPreviousRate(result?.rate || null);
@@ -100,7 +100,7 @@ const CurrencyConverter: React.FC = () => {
           !isNaN(rate) && isFinite(rate)) {
         setPreviousRate(result?.rate || null);
         const demoResult: ConversionResult = {
-          converted_amount: convertedAmount,
+          convertedAmount: convertedAmount,
           from: fromCurrency,
           to: toCurrency,
           amount: Number(currentAmount),
@@ -161,7 +161,7 @@ const CurrencyConverter: React.FC = () => {
         setResult({
           ...result,
           amount: Number(value),
-          converted_amount: convertedAmount,
+          convertedAmount: convertedAmount,
         });
       }
     } else {
@@ -304,7 +304,7 @@ const CurrencyConverter: React.FC = () => {
                   animate={{ scale: 1 }}
                   transition={{ duration: 0.2, delay: 0.1 }}
                 >
-                  {amount && Number(amount) > 0 && result?.converted_amount && !isNaN(result.converted_amount) && isFinite(result.converted_amount) ? formatNumber(result.converted_amount) : '0'} <span className="text-red-400">{toCurrency}</span>
+                  {amount && Number(amount) > 0 && result?.convertedAmount && !isNaN(result.convertedAmount) && isFinite(result.convertedAmount) ? formatNumber(result.convertedAmount) : '0'} <span className="text-red-400">{toCurrency}</span>
                 </motion.div>
                 <motion.button
                   onClick={handleRefresh}
