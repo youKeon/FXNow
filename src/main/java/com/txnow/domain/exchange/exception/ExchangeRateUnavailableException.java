@@ -20,6 +20,15 @@ public class ExchangeRateUnavailableException extends RuntimeException {
         this.currency = currency;
     }
 
+    /**
+     * Rate limit 초과 시 사용하는 생성자
+     */
+    public ExchangeRateUnavailableException(int currentCalls, int maxCalls, long waitTimeSeconds) {
+        super(String.format("BOK API rate limit exceeded. Current calls: %d/%d, Required wait time: %d seconds",
+            currentCalls, maxCalls, waitTimeSeconds));
+        this.currency = null;
+    }
+
     public Currency getCurrency() {
         return currency;
     }

@@ -1,14 +1,16 @@
 package com.txnow.infrastructure.external.bok;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.List;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record BokApiResponse(
     @JsonProperty("StatisticSearch")
     StatisticSearch statisticSearch
 ) {
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record StatisticSearch(
         @JsonProperty("list_total_count")
         int listTotalCount,
@@ -20,6 +22,7 @@ public record BokApiResponse(
         List<ExchangeRateData> rows
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Result(
         @JsonProperty("RESULT_CODE")
         String resultCode,
@@ -28,19 +31,8 @@ public record BokApiResponse(
         String resultMessage
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ExchangeRateData(
-        @JsonProperty("STAT_NAME")
-        String statName,
-
-        @JsonProperty("STAT_CODE")
-        String statCode,
-
-        @JsonProperty("ITEM_CODE1")
-        String itemCode1,
-
-        @JsonProperty("ITEM_NAME1")
-        String itemName1,
-
         @JsonProperty("DATA_VALUE")
         String dataValue,
 
