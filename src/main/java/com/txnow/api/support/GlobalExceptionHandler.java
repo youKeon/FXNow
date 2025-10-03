@@ -1,7 +1,10 @@
 package com.txnow.api.support;
 
+import com.txnow.domain.exchange.exception.ExchangeRateException;
 import com.txnow.domain.exchange.exception.ExchangeRateNotFoundException;
 import com.txnow.domain.exchange.exception.ExchangeRateUnavailableException;
+import com.txnow.domain.exchange.exception.InvalidAmountException;
+import com.txnow.domain.exchange.exception.InvalidCurrencyException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,27 +19,56 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(InvalidCurrencyException.class)
+    public ResponseEntity<ApiResponse<Object>> handleInvalidCurrencyException(InvalidCurrencyException e) {
+        log.warn("Invalid currency: {}", e.getMessage());
+        return ResponseEntity
+            .badRequest()
+            .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    @ExceptionHandler(InvalidAmountException.class)
+    public ResponseEntity<ApiResponse<Object>> handleInvalidAmountException(InvalidAmountException e) {
+        log.warn("Invalid amount: {}", e.getMessage());
+        return ResponseEntity
+            .badRequest()
+            .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
     @ExceptionHandler(ExchangeRateNotFoundException.class)
     public ResponseEntity<ApiResponse<Object>> handleExchangeRateNotFoundException(ExchangeRateNotFoundException e) {
         log.warn("Exchange rate not found: {}", e.getMessage());
         return ResponseEntity
             .status(HttpStatus.NOT_FOUND)
-            .body(ApiResponse.error(e.getMessage()));
+            .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
     }
 
     @ExceptionHandler(ExchangeRateUnavailableException.class)
     public ResponseEntity<ApiResponse<Object>> handleExchangeRateUnavailableException(ExchangeRateUnavailableException e) {
-        log.error("Exchange rate service unavailable: {}", e.getMessage());
+        log.error("Exchange rate service unavailable: {}", e.getMessage(), e);
         return ResponseEntity
             .status(HttpStatus.SERVICE_UNAVAILABLE)
-            .body(ApiResponse.error("Exchange rate service is temporarily unavailable. Please try again later."));
+            .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
+    }
+
+    /**
+     * Base exception handler for all ExchangeRateException subclasses
+     * Catches any custom exceptions not handled by more specific handlers above
+     */
+    @ExceptionHandler(ExchangeRateException.class)
+    public ResponseEntity<ApiResponse<Object>> handleExchangeRateException(ExchangeRateException e) {
+        log.error("Exchange rate error: {}", e.getMessage(), e);
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(ApiResponse.error(e.getErrorCode(), e.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalArgumentException(IllegalArgumentException e) {
+        log.warn("Illegal argument: {}", e.getMessage());
         return ResponseEntity
             .badRequest()
-            .body(ApiResponse.error(e.getMessage()));
+            .body(ApiResponse.error("INVALID_ARGUMENT", e.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -47,15 +79,17 @@ public class GlobalExceptionHandler {
             .map(FieldError::getDefaultMessage)
             .collect(Collectors.joining(", "));
 
+        log.warn("Validation failed: {}", errorMessage);
         return ResponseEntity
             .badRequest()
-            .body(ApiResponse.error("Validation failed: " + errorMessage));
+            .body(ApiResponse.error("VALIDATION_FAILED", "Validation failed: " + errorMessage));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleGenericException(Exception e) {
+        log.error("Unexpected error occurred: {}", e.getMessage(), e);
         return ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(ApiResponse.error("Internal server error"));
+            .body(ApiResponse.error("INTERNAL_ERROR", "An unexpected error occurred"));
     }
 }
