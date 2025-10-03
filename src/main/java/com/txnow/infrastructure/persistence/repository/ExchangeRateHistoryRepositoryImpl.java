@@ -11,10 +11,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * ExchangeRateHistoryRepository 구현체 (Adapter Pattern)
- * Domain Repository Interface를 JPA Repository로 연결
- */
 @Repository
 @RequiredArgsConstructor
 public class ExchangeRateHistoryRepositoryImpl implements ExchangeRateHistoryRepository {
@@ -35,7 +31,7 @@ public class ExchangeRateHistoryRepositoryImpl implements ExchangeRateHistoryRep
     }
 
     @Override
-    public ExchangeRateHistory findLatestByCurrencyAndTimestampBetween(
+    public ExchangeRateHistory findExchangeRateByTimestamp(
         Currency currency,
         LocalDateTime startTime,
         LocalDateTime endTime

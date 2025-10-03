@@ -40,7 +40,7 @@ public class ExchangeRateScheduler {
         LocalDate today = LocalDate.now();
 
         for (Currency currency : SUPPORTED_CURRENCIES) {
-            if (!currency.isBokSupported()) {
+            if (!currency.isSupportedCurrency()) {
                 log.warn("Currency {} not supported by BOK API", currency);
                 return;
             }
@@ -48,14 +48,13 @@ public class ExchangeRateScheduler {
             String bokCode = currency.getBokCode();
 
             // 1. 오늘 환율 조회
-            BokApiResponse response = bokApiClient.getExchangeRate(bokCode, today,
-                today);
+            BokApiResponse response = bokApiClient.getTodayExchangeRate(bokCode);
 
             // 2. DB에서 전일 데이터 조회 (변동폭 계산용)
             LocalDate yesterday = today.minusDays(1);
 
             ExchangeRateHistory yesterdayRate = historyRepository
-                .findLatestByCurrencyAndTimestampBetween(
+                .findExchangeRateByTimestamp(
                     currency,
                     yesterday.atStartOfDay(),
                     yesterday.atTime(23, 59, 59)
@@ -67,11 +66,7 @@ public class ExchangeRateScheduler {
             for (var row : response.statisticSearch().rows()) {
                 LocalDate date = LocalDate.parse(row.time(), formatter);
                 BigDecimal rate = new BigDecimal(row.dataValue());
-
-                // JPY는 100엔 기준이므로 1엔당으로 변환
-                if (currency == Currency.JPY) {
-                    rate = rate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-                }
+                rate = currency.normalizeFromBokApi(rate);
 
                 // 4. 전일 대비 변동폭 계산
                 BigDecimal change = BigDecimal.ZERO;
