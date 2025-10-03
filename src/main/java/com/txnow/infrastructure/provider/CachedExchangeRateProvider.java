@@ -1,12 +1,13 @@
 package com.txnow.infrastructure.provider;
 
 import com.txnow.domain.exchange.model.Currency;
-import com.txnow.domain.exchange.model.HistoricalRate;
+import com.txnow.domain.exchange.model.DailyRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.infrastructure.cache.CacheKeyGenerator;
 import com.txnow.domain.exchange.model.ChartPeriod;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.math.BigDecimal;
@@ -15,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Redis 기반 환율 캐싱 (L1 캐시)
+ * TTL Jitter를 적용하여 Cache Stampede 방지
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -23,6 +25,15 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
     private final ExchangeRateProvider delegate;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheKeyGenerator cacheKeyGenerator;
+
+    @Value("${cache.exchange-rate.ttl-seconds:86400}")
+    private long baseTtlSeconds;
+
+    @Value("${cache.exchange-rate.jitter-percentage:0.2}")
+    private double jitterPercentage;
+
+    @Value("${cache.stale-data.ttl-seconds:604800}")
+    private long staleTtlSeconds;
 
 
     @Override
@@ -40,7 +51,7 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
 
         log.debug("Cache MISS (Redis): {}", currency);
 
-        // Redis에 없으면 delegate(DB → API)에서 조회
+        // Redis에 없으면 DB에서 조회
         BigDecimal rate = delegate.getCurrentExchangeRate(currency);
 
         // Redis에 캐싱
@@ -50,29 +61,8 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
     }
 
     @Override
-    public BigDecimal getExchangeRate(Currency fromCurrency, Currency toCurrency) {
-        // 통화 간 환율은 항상 현재 환율 기반으로 계산
-        if (fromCurrency == null || toCurrency == null) {
-            throw new IllegalArgumentException("Currencies must not be null");
-        }
-
-        if (fromCurrency == toCurrency) {
-            return BigDecimal.ONE;
-        }
-
-        BigDecimal fromRate = getCurrentExchangeRate(fromCurrency);
-
-        if (toCurrency == Currency.KRW) {
-            return fromRate;
-        }
-
-        BigDecimal toRate = getCurrentExchangeRate(toCurrency);
-        return fromRate.divide(toRate, 6, java.math.RoundingMode.HALF_UP);
-    }
-
-    @Override
-    public List<HistoricalRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
-        // 히스토리 데이터는 캐싱하지 않음 (별도의 @Cacheable로 처리 가능)
+    public List<DailyRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
+        // 일별 데이터는 캐싱하지 않음 (별도의 @Cacheable로 처리 가능)
         return delegate.getExchangeRateHistory(currency, period);
     }
 
@@ -93,15 +83,22 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
     }
 
     /**
-     * Redis에 환율 저장 (24시간 TTL)
+     * Redis에 환율 저장 (TTL Jitter 적용)
+     * Cache Stampede 방지를 위해 각 통화별로 다른 만료 시간 설정
      */
     private void saveToRedisCache(Currency currency, BigDecimal rate) {
         String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
-        redisTemplate.opsForValue().set(cacheKey, rate, 24, TimeUnit.HOURS);
-        log.debug("Saved to Redis: {} = {}", currency, rate);
 
-        // Stale 데이터도 저장 (Fallback용, 7일 TTL)
+        // TTL Jitter 계산 (±20% 분산)
+        long ttlWithJitter = cacheKeyGenerator.calculateTtlWithJitter(baseTtlSeconds, jitterPercentage);
+
+        redisTemplate.opsForValue().set(cacheKey, rate, ttlWithJitter, TimeUnit.SECONDS);
+
+        log.debug("Saved to Redis: {} = {} (TTL: {}s, base: {}s, jitter: {}%)",
+            currency, rate, ttlWithJitter, baseTtlSeconds, (int)(jitterPercentage * 100));
+
+        // Stale 데이터도 저장 (Fallback용)
         String staleKey = cacheKeyGenerator.staleDataKey(currency.name());
-        redisTemplate.opsForValue().set(staleKey, rate, 7, TimeUnit.DAYS);
+        redisTemplate.opsForValue().set(staleKey, rate, staleTtlSeconds, TimeUnit.SECONDS);
     }
 }

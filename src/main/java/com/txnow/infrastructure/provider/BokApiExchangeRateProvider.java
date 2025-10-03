@@ -3,11 +3,10 @@ package com.txnow.infrastructure.provider;
 import com.txnow.domain.exchange.exception.ExchangeRateNotFoundException;
 import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
-import com.txnow.domain.exchange.model.HistoricalRate;
+import com.txnow.domain.exchange.model.DailyRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.infrastructure.external.bok.BokApiClient;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -29,86 +28,52 @@ public class BokApiExchangeRateProvider implements ExchangeRateProvider {
 
     @Override
     public BigDecimal getCurrentExchangeRate(Currency currency) {
-        if (currency == Currency.KRW) {
-            return BigDecimal.ONE;
-        }
 
-        if (!currency.isBokSupported()) {
+        if (!currency.isSupportedCurrency()) {
             throw new ExchangeRateNotFoundException(currency, "Currency not supported by BOK API");
         }
 
         String bokCode = currency.getBokCode();
-        log.info("Fetching current rate from BOK API: {}", currency);
 
         var response = bokApiClient.getTodayExchangeRate(bokCode);
         var statisticSearch = response.statisticSearch();
 
-        // 최신 데이터 (첫 번째 row)
-        var latestRow = statisticSearch.rows().getFirst();
-        BigDecimal currentRate = new BigDecimal(latestRow.dataValue());
+        var row = statisticSearch.rows().getFirst();
+        BigDecimal currentRate = new BigDecimal(row.dataValue());
 
-        // JPY는 100엔 기준이므로 1엔당으로 변환
-        if (currency == Currency.JPY) {
-            currentRate = currentRate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-        }
-
-        return currentRate;
+        return currency.normalizeFromBokApi(currentRate);
     }
 
     @Override
-    public BigDecimal getExchangeRate(Currency fromCurrency, Currency toCurrency) {
-        if (fromCurrency == null || toCurrency == null) {
-            throw new IllegalArgumentException("Currencies must not be null");
-        }
-
-        if (fromCurrency == toCurrency) {
-            return BigDecimal.ONE;
-        }
-
-        BigDecimal fromRate = getCurrentExchangeRate(fromCurrency);
-
-        if (toCurrency == Currency.KRW) {
-            return fromRate;
-        }
-
-        BigDecimal toRate = getCurrentExchangeRate(toCurrency);
-        return fromRate.divide(toRate, 6, RoundingMode.HALF_UP);
-    }
-
-    @Override
-    public List<HistoricalRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
-        if (!currency.isBokSupported()) {
+    public List<DailyRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
+        if (!currency.isSupportedCurrency()) {
             throw new ExchangeRateNotFoundException(currency, "BOK code not found for currency");
         }
 
         String bokCode = currency.getBokCode();
         log.info("Fetching history from BOK API: {} period: {}", currency, period);
 
-        var response = bokApiClient.getExchangeRateHistory(bokCode, period);
+        var response = bokApiClient.getExchangeRate(bokCode, period);
 
         var statisticSearch = response.statisticSearch();
 
-        List<HistoricalRate> historicalRates = new ArrayList<>();
+        List<DailyRate> dailyRates = new ArrayList<>();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
 
         for (var row : statisticSearch.rows()) {
             LocalDate date = LocalDate.parse(row.time(), formatter);
             BigDecimal rate = new BigDecimal(row.dataValue());
+            rate = currency.normalizeFromBokApi(rate);
 
-            // JPY는 100엔 기준이므로 1엔당으로 변환
-            if (currency == Currency.JPY) {
-                rate = rate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
-            }
-
-            historicalRates.add(new HistoricalRate(date, rate));
+            dailyRates.add(new DailyRate(date, rate));
         }
 
-        if (historicalRates.isEmpty()) {
+        if (dailyRates.isEmpty()) {
             throw new ExchangeRateNotFoundException(currency, "No valid history data parsed");
         }
 
-        historicalRates.sort(Comparator.comparing(HistoricalRate::date));
+        dailyRates.sort(Comparator.comparing(DailyRate::date));
 
-        return historicalRates;
+        return dailyRates;
     }
 }
