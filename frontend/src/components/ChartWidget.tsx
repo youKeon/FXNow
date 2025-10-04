@@ -31,6 +31,11 @@ interface ChartPoint {
   iso: string;
 }
 
+interface MouseMoveState {
+  isTooltipActive?: boolean;
+  activePayload?: Array<{ payload: ChartPoint }>;
+}
+
 const supportedFromCodes = new Set(['USD', 'EUR', 'JPY', 'CNY', 'GBP']);
 const targetCurrencyCode = 'KRW';
 
@@ -227,14 +232,23 @@ const ChartWidget: React.FC = () => {
     void loadChartData();
   }, [loadChartData]);
 
+  // useMemo로 필터링 최적화
+  const filteredChartData = useMemo(() => {
+    return applyFilters(rawChartData, selectedPeriod);
+  }, [rawChartData, selectedPeriod, applyFilters]);
+
+  // useMemo로 통계 계산 최적화
+  const computedStatistics = useMemo(() => {
+    return computeStatistics(filteredChartData);
+  }, [filteredChartData, computeStatistics]);
+
+  // 계산된 값을 state에 반영
   useEffect(() => {
-    const filtered = applyFilters(rawChartData, selectedPeriod);
-    const { stats, highPoint, lowPoint } = computeStatistics(filtered);
-    setChartData(filtered);
-    setStatistics(stats);
-    setHighRecord(highPoint);
-    setLowRecord(lowPoint);
-  }, [rawChartData, selectedPeriod, applyFilters, computeStatistics]);
+    setChartData(filteredChartData);
+    setStatistics(computedStatistics.stats);
+    setHighRecord(computedStatistics.highPoint);
+    setLowRecord(computedStatistics.lowPoint);
+  }, [filteredChartData, computedStatistics]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -254,9 +268,9 @@ const ChartWidget: React.FC = () => {
 
   const displayPoint = hoverPoint ?? chartData[chartData.length - 1] ?? null;
 
-  const handleMouseMove = useCallback((state: any) => {
+  const handleMouseMove = useCallback((state: MouseMoveState) => {
     if (state?.isTooltipActive && state?.activePayload?.length) {
-      setHoverPoint(state.activePayload[0].payload as ChartPoint);
+      setHoverPoint(state.activePayload[0].payload);
     } else {
       setHoverPoint(null);
     }
@@ -314,13 +328,15 @@ const ChartWidget: React.FC = () => {
             </div>
 
             <div className="rounded-lg border border-gray-700 bg-gray-800 p-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-                <span className="text-sm font-medium text-gray-300 sm:min-w-[70px]">조회 기간</span>
-                <div
-                    className="inline-flex flex-wrap items-center gap-1 rounded-full bg-gray-700 p-1"
+              <div className="flex flex-col gap-4">
+                {/* 기간 버튼 */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
+                  <span className="text-sm font-medium text-gray-300 sm:min-w-[70px]">조회 기간</span>
+                  <div
+                    className="w-full sm:w-auto inline-flex flex-wrap items-center gap-1 rounded-full bg-gray-700 p-1"
                     role="tablist"
                     aria-label="기간 선택"
-                >
+                  >
                   {periodOptions.map((period) => {
                     const isActive = selectedPeriod === period.value;
                     return (
@@ -329,6 +345,7 @@ const ChartWidget: React.FC = () => {
                             type="button"
                             role="tab"
                             aria-selected={isActive}
+                            aria-label={`${period.label} 기간 선택`}
                             onClick={() => {
                               setSelectedPeriod(period.value);
                               // Set date range based on period
@@ -372,11 +389,15 @@ const ChartWidget: React.FC = () => {
                         </button>
                     );
                   })}
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="min-w-[180px]">
-                    <DatePicker
+                {/* 날짜 범위 선택 */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <span className="text-sm font-medium text-gray-300 sm:min-w-[70px] sm:opacity-0 sm:pointer-events-none" aria-hidden="true">범위</span>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <DatePicker
                         value={customRange.start}
                         onChange={(date) => {
                           setCustomRange((prev) => ({ ...prev, start: date }));
@@ -385,12 +406,12 @@ const ChartWidget: React.FC = () => {
                             setSelectedPeriod('custom');
                           }
                         }}
-                        placeholder=""
-                    />
-                  </div>
-                  <span className="text-gray-400">~</span>
-                  <div className="min-w-[180px]">
-                    <DatePicker
+                        placeholder="시작일"
+                      />
+                    </div>
+                    <span className="text-gray-400 self-center hidden sm:block">~</span>
+                    <div className="flex-1 min-w-0">
+                      <DatePicker
                         value={customRange.end}
                         onChange={(date) => {
                           setCustomRange((prev) => ({ ...prev, end: date }));
@@ -399,8 +420,9 @@ const ChartWidget: React.FC = () => {
                             setSelectedPeriod('custom');
                           }
                         }}
-                        placeholder=""
-                    />
+                        placeholder="종료일"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -427,8 +449,8 @@ const ChartWidget: React.FC = () => {
 
             {/* 기간 통계 */}
             {statistics && highRecord && lowRecord ? (
-                <div className="pt-4 border-t border-gray-700 sm:h-20">
-                  <div className="grid gap-4 sm:grid-cols-3 text-sm text-gray-300 h-full">
+                <div className="pt-4 border-t border-gray-700">
+                  <div className="grid gap-4 grid-cols-1 sm:grid-cols-3 text-sm text-gray-300">
                     <div className="flex flex-col justify-center space-y-1">
                       <p className="text-xs text-gray-500">최고</p>
                       <p className="text-lg font-semibold text-white tabular-nums">
@@ -488,7 +510,7 @@ const ChartWidget: React.FC = () => {
             </div>
           </div>
 
-          <div className="h-72">
+          <div className="h-64 sm:h-72 md:h-80">
             {isLoading ? (
                 <div className="flex items-center justify-center h-full text-gray-400">
                   차트 데이터를 불러오는 중...
@@ -508,7 +530,7 @@ const ChartWidget: React.FC = () => {
                   차트 데이터가 없습니다.
                 </div>
             ) : (
-                <div className="h-72">
+                <div className="h-64 sm:h-72 md:h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                         data={chartData}
@@ -532,17 +554,19 @@ const ChartWidget: React.FC = () => {
                       />
                       <Tooltip
                           cursor={{ stroke: 'rgba(148, 163, 184, 0.45)', strokeWidth: 1 }}
-                          content={({ active, payload }) => {
+                          content={(props) => {
+                            const { active, payload } = props;
                             if (active && payload && payload.length) {
                               const point = payload[0];
                               const datum = point.payload as ChartPoint;
+                              const value = point.value as number;
                               return (
                                   <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-lg space-y-1">
                                     <p className="text-xs font-medium text-gray-200">
                                       {formatDateTimeKST(datum.iso)}
                                     </p>
                                     <p className="text-sm text-white tabular-nums">
-                                      {formatNumberFixed(point.value as number)} {targetCurrency}
+                                      {formatNumberFixed(value)} {targetCurrency}
                                     </p>
                                     <p className={`text-[11px] ${datum.dayChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                       {datum.dayChange >= 0 ? '+' : ''}{datum.dayChange.toFixed(2)}%

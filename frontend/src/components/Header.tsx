@@ -1,14 +1,58 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Globe, Zap } from 'lucide-react';
 import FXIcon from './FXIcon';
+import { api } from '../services/api';
+import { formatNumber } from '../utils/currencies';
+
+interface LiveRate {
+  currency: string;
+  rate: string;
+  change: string;
+  isPositive: boolean;
+}
 
 const Header: React.FC = () => {
-  // 실시간 환율 데이터 (실제로는 API에서 가져와야 함)
-  const liveRates = [
-    { currency: 'USD/KRW', rate: '1,335.50', change: '+0.75%', isPositive: true },
-    { currency: 'EUR/KRW', rate: '1,445.20', change: '-0.23%', isPositive: false },
-    { currency: 'JPY/KRW', rate: '8.95', change: '+0.12%', isPositive: true },
-  ];
+  const [liveRates, setLiveRates] = useState<LiveRate[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const fetchLiveRates = async () => {
+      try {
+        const currentRates = await api.getCurrentRates();
+
+        // API 응답을 LiveRate 형식으로 변환
+        const formattedRates: LiveRate[] = Object.entries(currentRates).map(([, value]: [string, any]) => ({
+          currency: `${value.baseCurrency}/${value.targetCurrency}`,
+          rate: formatNumber(value.rate),
+          change: `${value.change >= 0 ? '+' : ''}${value.changePercent.toFixed(2)}%`,
+          isPositive: value.change >= 0,
+        }));
+
+        // USD, EUR, JPY만 표시 (상위 3개)
+        const displayRates = formattedRates
+          .filter(r => r.currency.startsWith('USD/') || r.currency.startsWith('EUR/') || r.currency.startsWith('JPY/'))
+          .slice(0, 3);
+
+        setLiveRates(displayRates);
+      } catch (error) {
+        console.error('Failed to fetch live rates:', error);
+        // 폴백 데이터 (API 실패 시)
+        setLiveRates([
+          { currency: 'USD/KRW', rate: '—', change: '—', isPositive: true },
+          { currency: 'EUR/KRW', rate: '—', change: '—', isPositive: true },
+          { currency: 'JPY/KRW', rate: '—', change: '—', isPositive: true },
+        ]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLiveRates();
+
+    // 30초마다 갱신
+    const interval = setInterval(fetchLiveRates, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <header className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 border-b border-gray-700 shadow-lg">
@@ -38,22 +82,35 @@ const Header: React.FC = () => {
         {/* 하단: 주요 환율 정보 (모바일 최적화) */}
         <div className="pb-3 -mx-4 px-4">
           <div className="flex space-x-2 overflow-x-auto scrollbar-hide">
-            {liveRates.map((rate, index) => (
-              <div key={index} className="flex-shrink-0 p-2 bg-gray-800 bg-opacity-50 rounded-lg border border-gray-700 min-w-[100px]">
-                <div className="flex items-center space-x-1 mb-1">
-                  <Globe className="h-2.5 w-2.5 text-gray-400" />
-                  <div className="text-xs font-medium text-gray-300">{rate.currency}</div>
+            {isLoading ? (
+              // 로딩 스켈레톤
+              <>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex-shrink-0 p-2 bg-gray-800 bg-opacity-50 rounded-lg border border-gray-700 min-w-[100px] animate-pulse">
+                    <div className="h-3 bg-gray-700 rounded w-16 mb-2" />
+                    <div className="h-4 bg-gray-700 rounded w-20 mb-2" />
+                    <div className="h-4 bg-gray-700 rounded w-12" />
+                  </div>
+                ))}
+              </>
+            ) : (
+              liveRates.map((rate, index) => (
+                <div key={index} className="flex-shrink-0 p-2 bg-gray-800 bg-opacity-50 rounded-lg border border-gray-700 min-w-[100px]">
+                  <div className="flex items-center space-x-1 mb-1">
+                    <Globe className="h-2.5 w-2.5 text-gray-400" />
+                    <div className="text-xs font-medium text-gray-300">{rate.currency}</div>
+                  </div>
+                  <div className="text-sm font-bold text-white mb-1">{rate.rate}</div>
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
+                    rate.isPositive
+                      ? 'text-green-300 bg-green-500 bg-opacity-20'
+                      : 'text-red-300 bg-red-500 bg-opacity-20'
+                  }`}>
+                    {rate.change}
+                  </span>
                 </div>
-                <div className="text-sm font-bold text-white mb-1">{rate.rate}</div>
-                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
-                  rate.isPositive
-                    ? 'text-green-300 bg-green-500 bg-opacity-20'
-                    : 'text-red-300 bg-red-500 bg-opacity-20'
-                }`}>
-                  {rate.change}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

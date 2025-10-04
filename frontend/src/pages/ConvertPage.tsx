@@ -1,52 +1,49 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useForm } from 'react-hook-form';
-import { NumericFormat } from 'react-number-format';
-import { ArrowLeftRight, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
+import { NumericFormat, NumberFormatValues } from 'react-number-format';
+import { ArrowLeftRight } from 'lucide-react';
 import CurrencySelector from '../components/CurrencySelector';
 import ChartWidget from '../components/ChartWidget';
 import AlertWidget from '../components/AlertWidget';
-import { formatNumber } from '../utils/currencies';
+import ConversionResult from '../components/ConversionResult';
 import { api } from '../services/api';
-import type { ConversionResult } from '../types';
+import { CURRENCY_CONFIG, DEMO_RATES, ARIA_LABELS } from '../constants/currency';
+import type { ConversionResult as ConversionResultType } from '../types';
 
 interface ConvertPageProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
+// API 응답 검증 유틸 함수
+const isValidConversionResult = (result: ConversionResultType): boolean => {
+  return !isNaN(result.convertedAmount) &&
+         isFinite(result.convertedAmount) &&
+         !isNaN(result.rate) &&
+         isFinite(result.rate);
+};
+
 // 변환기 컴포넌트 분리
 const CurrencyConverter: React.FC = () => {
-  const [amount, setAmount] = useState<string>('1.00');
-  const [fromCurrency, setFromCurrency] = useState<string>('USD');
-  const [toCurrency, setToCurrency] = useState<string>('KRW');
-  const [result, setResult] = useState<ConversionResult | null>(null);
+  const [amount, setAmount] = useState<string>(CURRENCY_CONFIG.DEFAULT_AMOUNT);
+  const [fromCurrency, setFromCurrency] = useState<string>(CURRENCY_CONFIG.DEFAULT_FROM);
+  const [toCurrency, setToCurrency] = useState<string>(CURRENCY_CONFIG.DEFAULT_TO);
+  const [result, setResult] = useState<ConversionResultType | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [lastUpdate, setLastUpdate] = useState<string>('');
   const [previousRate, setPreviousRate] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
-  const { setValue } = useForm({
-    defaultValues: {
-      amount: '1.00'
-    }
-  });
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resultRef = useRef<ConversionResultType | null>(null);
 
-  const handleSwapCurrencies = () => {
-    const newFromCurrency = toCurrency;
-    const newToCurrency = fromCurrency;
+  // resultRef 동기화
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
 
-    setFromCurrency(newFromCurrency);
-    setToCurrency(newToCurrency);
-
-    // 통화 변경 즉시 새로운 환율로 계산
-    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-      handleConvert(amount);
-    }
-  };
-
-  const handleConvert = async (formAmount?: string) => {
+  const handleConvert = useCallback(async (formAmount?: string) => {
     const currentAmount = formAmount || amount;
     if (!currentAmount || isNaN(Number(currentAmount)) || Number(currentAmount) <= 0) {
       setError('');
@@ -61,7 +58,7 @@ const CurrencyConverter: React.FC = () => {
       const apiResponse = await api.convertCurrency(Number(currentAmount), fromCurrency, toCurrency);
 
       // API 응답에 요청 정보 추가
-      const conversionResult: ConversionResult = {
+      const conversionResult: ConversionResultType = {
         convertedAmount: apiResponse.convertedAmount,
         rate: apiResponse.rate,
         timestamp: apiResponse.timestamp,
@@ -71,81 +68,74 @@ const CurrencyConverter: React.FC = () => {
       };
 
       // API 응답 검증
-      if (conversionResult &&
-          !isNaN(conversionResult.convertedAmount) &&
-          isFinite(conversionResult.convertedAmount) &&
-          !isNaN(conversionResult.rate) &&
-          isFinite(conversionResult.rate)) {
-        setPreviousRate(result?.rate || null);
+      if (isValidConversionResult(conversionResult)) {
+        setPreviousRate(resultRef.current?.rate || null);
         setResult(conversionResult);
-        setLastUpdate(new Date(conversionResult.timestamp).toLocaleString('ko-KR'));
+        setIsDemoMode(false);
       }
     } catch (err) {
       // API 실패 시 데모 데이터 사용
       console.warn('API failed, using demo data:', err);
+      setIsDemoMode(true);
 
-      // 간단한 환율 데모 데이터
-      const demoRates: Record<string, Record<string, number>> = {
-        'USD': { 'KRW': 1335.50, 'EUR': 0.85, 'JPY': 110.20 },
-        'KRW': { 'USD': 0.00075, 'EUR': 0.00064, 'JPY': 0.083 },
-        'EUR': { 'USD': 1.17, 'KRW': 1445.20, 'JPY': 129.50 },
-        'JPY': { 'USD': 0.009, 'KRW': 12.05, 'EUR': 0.0077 }
-      };
-
-      const rate = demoRates[fromCurrency]?.[toCurrency] || 1;
+      const rate = DEMO_RATES[fromCurrency]?.[toCurrency] || 1;
       const convertedAmount = Number(currentAmount) * rate;
 
-      // 계산 결과가 유효한 경우에만 설정
-      if (!isNaN(convertedAmount) && isFinite(convertedAmount) &&
-          !isNaN(rate) && isFinite(rate)) {
-        setPreviousRate(result?.rate || null);
-        const demoResult: ConversionResult = {
-          convertedAmount: convertedAmount,
-          from: fromCurrency,
-          to: toCurrency,
-          amount: Number(currentAmount),
-          rate,
-          timestamp: new Date().toISOString()
-        };
+      const demoResult: ConversionResultType = {
+        convertedAmount: convertedAmount,
+        from: fromCurrency,
+        to: toCurrency,
+        amount: Number(currentAmount),
+        rate,
+        timestamp: new Date().toISOString()
+      };
 
+      // 계산 결과가 유효한 경우에만 설정
+      if (isValidConversionResult(demoResult)) {
+        setPreviousRate(resultRef.current?.rate || null);
         setResult(demoResult);
-        setLastUpdate(new Date().toLocaleString('ko-KR'));
       }
       setError(''); // 에러 메시지 제거
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [amount, fromCurrency, toCurrency]);
+
+  const handleSwapCurrencies = useCallback(() => {
+    const newFromCurrency = toCurrency;
+    const newToCurrency = fromCurrency;
+
+    setFromCurrency(newFromCurrency);
+    setToCurrency(newToCurrency);
+
+    // 통화 변경 즉시 새로운 환율로 계산
+    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
+      handleConvert(amount);
+    }
+  }, [toCurrency, fromCurrency, amount, handleConvert]);
 
   // Auto-convert when currency changes (not amount - handled by debounce)
   useEffect(() => {
     if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
       handleConvert();
     }
-  }, [fromCurrency, toCurrency]);
+  }, [fromCurrency, toCurrency, handleConvert]);
 
   // Initial conversion on page load
   useEffect(() => {
     // 초기 로드 시 즉시 API 호출하여 환율 가져오기
-    const initConvert = async () => {
-      if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-        await handleConvert(amount);
-      }
-    };
-    initConvert();
+    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
+      handleConvert(amount);
+    }
   }, []);
 
-  // 디바운스 타이머
-  const [debounceTimer, setDebounceTimer] = useState<number | null>(null);
-
-  const handleAmountChange = (values: any) => {
+  const handleAmountChange = useCallback((values: NumberFormatValues) => {
     const { value } = values;
     setAmount(value || '');
-    setValue('amount', value || '');
 
     // 기존 타이머 취소
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
 
     // 값이 비어있거나 0이면 결과 초기화
@@ -155,11 +145,12 @@ const CurrencyConverter: React.FC = () => {
     }
 
     // 즉시 변환 실행 (현재 환율이 있으면)
-    if (result?.rate) {
-      const convertedAmount = Number(value) * result.rate;
+    const currentResult = resultRef.current;
+    if (currentResult?.rate) {
+      const convertedAmount = Number(value) * currentResult.rate;
       if (!isNaN(convertedAmount) && isFinite(convertedAmount)) {
         setResult({
-          ...result,
+          ...currentResult,
           amount: Number(value),
           convertedAmount: convertedAmount,
         });
@@ -169,30 +160,26 @@ const CurrencyConverter: React.FC = () => {
       handleConvert(value);
     }
 
-    // API 호출은 디바운싱 (500ms 후 실행) - 환율 업데이트용
-    const timer = setTimeout(() => {
+    // API 호출은 디바운싱 - 환율 업데이트용
+    debounceTimerRef.current = setTimeout(() => {
       if (value && !isNaN(Number(value)) && Number(value) > 0) {
         handleConvert(value);
       }
-    }, 500);
-
-    setDebounceTimer(timer);
-  };
+    }, CURRENCY_CONFIG.DEBOUNCE_MS);
+  }, [handleConvert]);
 
   // 컴포넌트 언마운트 시 타이머 정리
   useEffect(() => {
     return () => {
-      if (debounceTimer) {
-        clearTimeout(debounceTimer);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [debounceTimer]);
+  }, []);
 
-  const handleRefresh = async (e?: React.MouseEvent) => {
+  const handleRefresh = useCallback(async (e: React.MouseEvent) => {
     // 이벤트 전파 방지 (부모의 handleSwapCurrencies 실행 막기)
-    if (e) {
-      e.stopPropagation();
-    }
+    e.stopPropagation();
 
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       return;
@@ -201,7 +188,7 @@ const CurrencyConverter: React.FC = () => {
     setIsRefreshing(true);
     await handleConvert(amount);
     setIsRefreshing(false);
-  };
+  }, [amount, handleConvert]);
 
   return (
     <>
@@ -217,12 +204,12 @@ const CurrencyConverter: React.FC = () => {
             id="amount"
             value={amount}
             onValueChange={handleAmountChange}
-            placeholder="1.00"
+            placeholder={CURRENCY_CONFIG.DEFAULT_AMOUNT}
             allowNegative={false}
-            decimalScale={2}
+            decimalScale={CURRENCY_CONFIG.DECIMAL_SCALE}
             thousandSeparator=","
             className="w-full px-4 py-4 text-lg font-semibold bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400 focus:bg-gray-600 transition-all duration-200"
-            aria-label="변환할 금액 입력"
+            aria-label={ARIA_LABELS.AMOUNT_INPUT}
           />
         </div>
 
@@ -250,7 +237,7 @@ const CurrencyConverter: React.FC = () => {
               whileTap={{ scale: 0.9, rotate: 180 }}
               transition={{ duration: 0.2 }}
               className="p-3 bg-gray-700 hover:bg-gray-600 rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500"
-              aria-label="통화 교환"
+              aria-label={ARIA_LABELS.SWAP_CURRENCIES}
             >
               <ArrowLeftRight className="h-5 w-5 text-gray-300" />
             </motion.button>
@@ -278,7 +265,7 @@ const CurrencyConverter: React.FC = () => {
         onClick={handleSwapCurrencies}
         role="button"
         tabIndex={0}
-        aria-label="결과를 클릭하여 통화 교환"
+        aria-label={ARIA_LABELS.CLICK_TO_SWAP}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -288,62 +275,17 @@ const CurrencyConverter: React.FC = () => {
       >
         <AnimatePresence mode="wait">
           {(result || (!amount || Number(amount) === 0)) && !error && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-            >
-              <p className="text-sm text-gray-400 mb-2 text-center">
-                {amount && Number(amount) > 0 && result ? formatNumber(result.amount) : '0'} {fromCurrency} =
-              </p>
-              <div className="flex items-center justify-center gap-3 mb-3">
-                <motion.div
-                  className="text-4xl font-bold text-white text-center"
-                  initial={{ scale: 0.95 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.2, delay: 0.1 }}
-                >
-                  {amount && Number(amount) > 0 && result?.convertedAmount && !isNaN(result.convertedAmount) && isFinite(result.convertedAmount) ? formatNumber(result.convertedAmount) : '0'} <span className="text-red-400">{toCurrency}</span>
-                </motion.div>
-                <motion.button
-                  onClick={handleRefresh}
-                  disabled={isRefreshing || isLoading}
-                  whileHover={{ scale: isRefreshing ? 1 : 1.1 }}
-                  whileTap={{ scale: isRefreshing ? 1 : 0.9 }}
-                  className={`p-2 rounded-full transition-colors duration-200 ${
-                    isRefreshing || isLoading
-                      ? 'text-gray-500 cursor-not-allowed'
-                      : 'text-green-400 hover:text-green-300 hover:bg-gray-700'
-                  }`}
-                  aria-label="최신 환율 조회"
-                >
-                  <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                </motion.button>
-              </div>
-              <div className="text-center space-y-1">
-                <div className="flex items-center justify-center gap-2">
-                  <p className="text-sm text-gray-400">
-                    1 {fromCurrency} = {result?.rate && !isNaN(result.rate) && isFinite(result.rate) ? formatNumber(result.rate) : '0'} {toCurrency}
-                  </p>
-                  {previousRate && result?.rate && previousRate !== result.rate && (
-                    <div className={`flex items-center gap-1 text-xs font-medium ${result.rate > previousRate ? 'text-green-400' : 'text-red-400'}`}>
-                      {result.rate > previousRate ? (
-                        <TrendingUp className="h-3 w-3" />
-                      ) : (
-                        <TrendingDown className="h-3 w-3" />
-                      )}
-                      <span>{Math.abs(((result.rate - previousRate) / previousRate) * 100).toFixed(2)}%</span>
-                    </div>
-                  )}
-                </div>
-                {result && (
-                  <p className="text-xs text-gray-500">
-                    마지막 업데이트: {new Date(result.timestamp).toLocaleString('ko-KR')}
-                  </p>
-                )}
-              </div>
-            </motion.div>
+            <ConversionResult
+              result={result}
+              amount={amount}
+              fromCurrency={fromCurrency}
+              toCurrency={toCurrency}
+              previousRate={previousRate}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+              isLoading={isLoading}
+              isDemoMode={isDemoMode}
+            />
           )}
         </AnimatePresence>
 
@@ -363,27 +305,6 @@ const CurrencyConverter: React.FC = () => {
             >
               다시 시도
             </button>
-          </motion.div>
-        )}
-
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center space-y-4"
-          >
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-              className="inline-block w-8 h-8 border-4 border-gray-600 border-t-red-500 rounded-full"
-            />
-            <motion.p
-              animate={{ opacity: [1, 0.5, 1] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-sm text-gray-400"
-            >
-              환율 계산 중...
-            </motion.p>
           </motion.div>
         )}
       </div>

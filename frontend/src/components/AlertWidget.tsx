@@ -137,8 +137,11 @@ const AlertWidget: React.FC = () => {
           <span className="text-sm font-medium text-gray-300">환율 알림</span>
         </div>
         <button
+          type="button"
           onClick={() => setShowForm(!showForm)}
-          className="p-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+          aria-label="새 알림 추가"
+          aria-expanded={showForm}
+          className="p-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-800"
         >
           <Plus className="h-4 w-4 text-white" />
         </button>
@@ -310,29 +313,42 @@ const AlertWidget: React.FC = () => {
                     <div className="flex items-center space-x-3">
                       {/* 토글 스위치 */}
                       <div className="flex items-center space-x-2">
-                        <span className={`text-xs font-medium ${
-                          alert.isActive ? 'text-green-400' : 'text-gray-500'
-                        }`}>
+                        <span
+                          id={`alert-status-${alert.id}`}
+                          className={`text-xs font-medium ${
+                            alert.isActive ? 'text-green-400' : 'text-gray-500'
+                          }`}
+                        >
                           {alert.isActive ? 'ON' : 'OFF'}
                         </span>
                         <button
+                          type="button"
+                          role="switch"
+                          aria-checked={alert.isActive}
+                          aria-labelledby={`alert-status-${alert.id}`}
+                          aria-label={`${alert.pair} 알림 ${alert.isActive ? '비활성화' : '활성화'}`}
                           onClick={() => handleToggleAlert(alert.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 border-2 ${
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 border-2 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-gray-700 ${
                             alert.isActive
                               ? 'bg-green-500 border-green-400 shadow-lg shadow-green-500/30'
                               : 'bg-gray-600 border-gray-500'
                           }`}
                         >
-                          <span className={`inline-block h-4 w-4 transform rounded-full transition-all duration-200 ${
-                            alert.isActive
-                              ? 'translate-x-5 bg-white shadow-md'
-                              : 'translate-x-1 bg-gray-300'
-                          }`} />
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block h-4 w-4 transform rounded-full transition-all duration-200 ${
+                              alert.isActive
+                                ? 'translate-x-5 bg-white shadow-md'
+                                : 'translate-x-1 bg-gray-300'
+                            }`}
+                          />
                         </button>
                       </div>
                       <button
+                        type="button"
                         onClick={() => handleDeleteAlert(alert.id)}
-                        className="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                        aria-label={`${alert.pair} 알림 삭제`}
+                        className="p-1 text-gray-400 hover:text-red-400 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 rounded"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
