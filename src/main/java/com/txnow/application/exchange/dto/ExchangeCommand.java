@@ -15,6 +15,7 @@ public record ExchangeCommand() {
     public record ExchangeChartCommand(
         Currency baseCurrency,
         Currency targetCurrency,
-        String period
+        String startDate,
+        String endDate
     ) {}
 }

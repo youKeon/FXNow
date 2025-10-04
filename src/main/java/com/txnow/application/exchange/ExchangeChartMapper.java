@@ -24,7 +24,8 @@ public class ExchangeChartMapper {
     public ExchangeChartResult toChartResult(
         Currency baseCurrency,
         Currency targetCurrency,
-        String periodCode,
+        String startDate,
+        String endDate,
         List<DailyRate> dailyRates
     ) {
         if (dailyRates.isEmpty()) {
@@ -39,10 +40,12 @@ public class ExchangeChartMapper {
         ExchangeChartStatistics statistics = calculateStatistics(rates);
         ExchangeCurrentRate currentRate = calculateCurrentRate(rates);
 
+        String periodLabel = startDate + " ~ " + endDate;
+
         return new ExchangeChartResult(
             baseCurrency,
             targetCurrency,
-            periodCode,
+            periodLabel,
             currentRate,
             LocalDateTime.now(),
             chartData,

@@ -2,13 +2,13 @@ package com.txnow.infrastructure.external.bok;
 
 import com.txnow.domain.exchange.exception.ExchangeRateNotFoundException;
 import com.txnow.domain.exchange.exception.ExchangeRateUnavailableException;
-import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.DailyRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -77,21 +77,19 @@ public class BokApiClient implements ExchangeRateProvider {
     }
 
     @Override
-    public List<DailyRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
+    public List<DailyRate> getExchangeRateHistory(Currency currency, LocalDate startDate, LocalDate endDate) {
         if (!currency.isSupportedCurrency()) {
             throw new ExchangeRateNotFoundException(currency, "Currency not supported by BOK API");
         }
 
         String bokCode = currency.getBokCode();
-        log.info("Fetching history from BOK API: {} period: {}", currency, period);
+        log.info("Fetching history from BOK API: {} from {} to {}", currency, startDate, endDate);
 
         // Rate limiting
         rateLimiter.acquirePermit();
 
-        // API 호출
-        LocalDate startDate = period.getStartDate();
-        LocalDate endDate = period.getEndDate();
-        int count = period.getRequiredDataCount();
+        // 날짜 범위로부터 데이터 개수 계산 (여유있게 +10일)
+        int count = (int) ChronoUnit.DAYS.between(startDate, endDate) + 10;
 
         String url = buildApiUrl(bokCode, startDate, endDate, count);
         BokApiResponse response = webClient.get()

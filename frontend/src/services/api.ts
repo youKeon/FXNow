@@ -39,8 +39,8 @@ export const api = {
   },
 
   // 환율 차트 데이터
-  async getExchangeHistory(baseCurrency: string, period: string): Promise<ExchangeRateChartResponse> {
-    const response = await fetch(`${API_BASE_URL}/exchange-rates/chart/${baseCurrency}?period=${period}`);
+  async getExchangeHistory(baseCurrency: string, startDate: string, endDate: string): Promise<ExchangeRateChartResponse> {
+    const response = await fetch(`${API_BASE_URL}/exchange-rates/chart/${baseCurrency}?startDate=${startDate}&endDate=${endDate}`);
     if (!response.ok) throw new Error('Failed to fetch exchange history');
     const result = await response.json();
     return result.data;

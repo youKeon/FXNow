@@ -1,13 +1,13 @@
 package com.txnow.infrastructure.provider;
 
 import com.txnow.domain.exchange.exception.ExchangeRateNotFoundException;
-import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.ExchangeRateHistory;
 import com.txnow.domain.exchange.model.DailyRate;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import com.txnow.domain.exchange.repository.ExchangeRateHistoryRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -71,21 +71,21 @@ public class DatabaseExchangeRateProvider implements ExchangeRateProvider {
     }
 
     @Override
-    public List<DailyRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
-        LocalDateTime startTime = period.getStartDate().atStartOfDay();
-        LocalDateTime endTime = period.getEndDate().atTime(23, 59, 59);
+    public List<DailyRate> getExchangeRateHistory(Currency currency, LocalDate startDate, LocalDate endDate) {
+        LocalDateTime startTime = startDate.atStartOfDay();
+        LocalDateTime endTime = endDate.atTime(23, 59, 59);
 
         List<ExchangeRateHistory> historyList = historyRepository
             .findByCurrencyAndTimestampBetween(currency, startTime, endTime);
 
         if (historyList.isEmpty()) {
             // DB에 데이터 없으면 API 호출
-            return delegate.getExchangeRateHistory(currency, period);
+            return delegate.getExchangeRateHistory(currency, startDate, endDate);
         }
 
         List<DailyRate> dailyRates = convertToDailyRates(historyList);
-        log.debug("Cache HIT (DB - Chart): {} - {} ({} days)",
-            currency, period.getCode(), dailyRates.size());
+        log.debug("Cache HIT (DB - Chart): {} - {} to {} ({} days)",
+            currency, startDate, endDate, dailyRates.size());
         return dailyRates;
     }
 

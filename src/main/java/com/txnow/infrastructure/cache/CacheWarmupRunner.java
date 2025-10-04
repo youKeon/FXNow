@@ -1,20 +1,17 @@
 package com.txnow.infrastructure.cache;
 
-import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
-import com.txnow.domain.exchange.model.DailyRate;
 import com.txnow.infrastructure.provider.DatabaseExchangeRateProvider;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.stereotype.Component;
-
-import java.math.BigDecimal;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
@@ -33,13 +30,6 @@ public class CacheWarmupRunner implements ApplicationRunner {
         Currency.USD, Currency.EUR, Currency.JPY, Currency.CNY
     );
 
-    // 차트 조회 주기
-    private static final List<ChartPeriod> CHART_PERIODS = List.of(
-        ChartPeriod.ONE_DAY,
-        ChartPeriod.ONE_WEEK,
-        ChartPeriod.ONE_MONTH
-    );
-
     @Override
     public void run(ApplicationArguments args) throws Exception {
         log.info("========================================");
@@ -51,16 +41,15 @@ public class CacheWarmupRunner implements ApplicationRunner {
             return;
         }
 
-        // 1. 환율 데이터 워밍업
+        // 환율 데이터 워밍업 (현재 환율만)
         warmupExchangeRates();
 
-        // 2. 차트 데이터 워밍업
-        warmupChartData();
         log.info("Cache warmup completed");
     }
 
     /**
      * 주요 통화 환율 워밍업 (DB → Redis)
+     * 차트 데이터는 워밍업하지 않음 (날짜 범위가 유동적이므로 DB에서 직접 조회)
      */
     private void warmupExchangeRates() {
         for (Currency currency : MAJOR_CURRENCIES) {
@@ -72,33 +61,6 @@ public class CacheWarmupRunner implements ApplicationRunner {
                 log.debug("Warmed up exchange rate: {} = {}", currency, rate);
             } catch (Exception e) {
                 log.warn("Failed to warmup exchange rate for {}: {}", currency, e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * 인기 차트 데이터 워밍업 (DB → Redis)
-     */
-    private void warmupChartData() {
-        log.info("Warming up chart data...");
-
-        // USD와 EUR만 차트 워밍업 (가장 많이 조회되는 통화)
-        List<Currency> chartCurrencies = List.of(Currency.USD, Currency.EUR);
-
-        for (Currency currency : chartCurrencies) {
-            for (ChartPeriod period : CHART_PERIODS) {
-                try {
-                    List<DailyRate> chartData = databaseProvider.getExchangeRateHistory(currency, period);
-                    String cacheKey = cacheKeyGenerator.exchangeRateHistoryKey(
-                        currency.name(), period.getCode());
-
-                    redisTemplate.opsForValue().set(cacheKey, chartData, ttlSeconds, TimeUnit.SECONDS);
-                    log.debug("Warmed up chart: {} - {} ({} points)",
-                        currency, period.getCode(), chartData.size());
-                } catch (Exception e) {
-                    log.warn("Failed to warmup chart for {} - {}: {}",
-                        currency, period.getCode(), e.getMessage());
-                }
             }
         }
     }

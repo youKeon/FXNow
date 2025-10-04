@@ -16,7 +16,6 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,15 +45,17 @@ public class ExchangeRateController {
         @Parameter(description = "기준 통화 (1단위당 KRW)", example = "USD")
         @PathVariable Currency baseCurrency,
 
-        @Parameter(description = "조회 기간 (1d, 1w, 1m, 3m, 1y)", example = "1w")
-        @RequestParam(defaultValue = "1w")
-        @Pattern(regexp = "^(1d|1w|1m|3m|1y)$", message = "Period must be one of: 1d, 1w, 1m, 3m, 1y")
-        String period
+        @Parameter(description = "시작일자 (yyyy-MM-dd)", example = "2024-01-01")
+        @RequestParam String startDate,
+
+        @Parameter(description = "종료일자 (yyyy-MM-dd)", example = "2024-01-31")
+        @RequestParam String endDate
     ) {
         ExchangeChartCommand command = new ExchangeChartCommand(
             baseCurrency,
             Currency.KRW,
-            period
+            startDate,
+            endDate
         );
 
         ExchangeChartResult result = exchangeRateService.getExchangeRateChart(command);

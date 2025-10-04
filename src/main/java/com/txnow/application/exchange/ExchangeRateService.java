@@ -4,13 +4,14 @@ import static com.txnow.application.exchange.dto.ExchangeResult.ExchangeChartRes
 import static com.txnow.application.exchange.dto.ExchangeResult.ExchangeConvertResult;
 
 import com.txnow.application.exchange.dto.ExchangeCommand;
-import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.DailyRate;
 import com.txnow.domain.exchange.model.ExchangeRateCalculator;
 import com.txnow.domain.exchange.provider.ExchangeRateProvider;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,18 +30,26 @@ public class ExchangeRateService {
      * 환율 차트 데이터 조회
      */
     public ExchangeChartResult getExchangeRateChart(ExchangeCommand.ExchangeChartCommand command) {
-        String periodCode = command.period();
         Currency baseCurrency = command.baseCurrency();
         Currency targetCurrency = command.targetCurrency();
+        String startDateStr = command.startDate();
+        String endDateStr = command.endDate();
 
         Assert.notNull(baseCurrency, "Base currency is required");
         Assert.notNull(targetCurrency, "Target currency is required");
         Assert.isTrue(targetCurrency == Currency.KRW, "Target currency must be KRW");
+        Assert.hasText(startDateStr, "Start date is required");
+        Assert.hasText(endDateStr, "End date is required");
 
-        ChartPeriod period = ChartPeriod.fromCode(periodCode);
-        List<DailyRate> rates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, period);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        LocalDate startDate = LocalDate.parse(startDateStr, formatter);
+        LocalDate endDate = LocalDate.parse(endDateStr, formatter);
 
-        return chartMapper.toChartResult(baseCurrency, targetCurrency, periodCode, rates);
+        Assert.isTrue(!startDate.isAfter(endDate), "Start date must be before or equal to end date");
+
+        List<DailyRate> rates = exchangeRateProvider.getExchangeRateHistory(baseCurrency, startDate, endDate);
+
+        return chartMapper.toChartResult(baseCurrency, targetCurrency, startDateStr, endDateStr, rates);
     }
 
     /**

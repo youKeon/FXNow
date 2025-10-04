@@ -40,17 +40,12 @@ const supportedFromCodes = new Set(['USD', 'EUR', 'JPY', 'CNY', 'GBP']);
 const targetCurrencyCode = 'KRW';
 
 const periodOptions = [
-  { value: '1d', label: '1일', request: '1d' },
-  { value: '1w', label: '1주', request: '1w' },
-  { value: '1m', label: '1개월', request: '1m' },
-  { value: '3m', label: '3개월', request: '3m' },
-  { value: '1y', label: '1년', request: '1y' },
+  { value: '1d', label: '1일' },
+  { value: '1w', label: '1주' },
+  { value: '1m', label: '1개월' },
+  { value: '3m', label: '3개월' },
+  { value: '1y', label: '1년' },
 ];
-
-const periodRequestMap = periodOptions.reduce<Record<string, string>>((acc, option) => {
-  acc[option.value] = option.request;
-  return acc;
-}, { custom: '1y' });
 
 const ChartWidget: React.FC = () => {
   // 초기 날짜 범위 계산 (1주일 전 ~ 오늘)
@@ -151,12 +146,11 @@ const ChartWidget: React.FC = () => {
   }, []);
 
   const loadChartData = useCallback(async () => {
-    const requestPeriod = periodRequestMap[selectedPeriod] ?? '1m';
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await api.getExchangeHistory(fromCurrency, requestPeriod);
+      const response = await api.getExchangeHistory(fromCurrency, customRange.start, customRange.end);
 
       const normalized: ExchangeRateChartResponse = {
         ...response,
@@ -226,7 +220,7 @@ const ChartWidget: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [applyFilters, computeStatistics, fromCurrency, selectedPeriod]);
+  }, [applyFilters, computeStatistics, fromCurrency, customRange.start, customRange.end]);
 
   useEffect(() => {
     void loadChartData();
