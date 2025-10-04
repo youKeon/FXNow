@@ -88,7 +88,7 @@ public class BokApiClient implements ExchangeRateProvider {
         // Rate limiting
         rateLimiter.acquirePermit();
 
-        // 날짜 범위로부터 데이터 개수 계산 (여유있게 +10일)
+        // 날짜 범위로부터 데이터 개수 계산 (여유분 +10일)
         int count = (int) ChronoUnit.DAYS.between(startDate, endDate) + 10;
 
         String url = buildApiUrl(bokCode, startDate, endDate, count);
