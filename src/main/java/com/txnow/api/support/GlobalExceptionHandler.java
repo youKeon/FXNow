@@ -12,6 +12,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -83,6 +84,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .badRequest()
             .body(ApiResponse.error("VALIDATION_FAILED", "Validation failed: " + errorMessage));
+    }
+
+    /**
+     * 정적 리소스 404 에러 처리
+     * 로그 레벨을 debug로 낮춰서 불필요한 에러 로그 방지
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Object>> handleNoResourceFoundException(NoResourceFoundException e) {
+        log.debug("Static resource not found: {}", e.getMessage());
+        return ResponseEntity
+            .status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.error("RESOURCE_NOT_FOUND", "Resource not found"));
     }
 
     @ExceptionHandler(Exception.class)

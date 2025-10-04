@@ -14,10 +14,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Redis 기반 환율 캐싱 (L1 캐시)
- * TTL Jitter를 적용하여 Cache Stampede 방지
- */
 @Slf4j
 @RequiredArgsConstructor
 public class CachedExchangeRateProvider implements ExchangeRateProvider {
@@ -27,13 +23,7 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
     private final CacheKeyGenerator cacheKeyGenerator;
 
     @Value("${cache.exchange-rate.ttl-seconds:86400}")
-    private long baseTtlSeconds;
-
-    @Value("${cache.exchange-rate.jitter-percentage:0.2}")
-    private double jitterPercentage;
-
-    @Value("${cache.stale-data.ttl-seconds:604800}")
-    private long staleTtlSeconds;
+    private long ttlSeconds;
 
 
     @Override
@@ -62,8 +52,22 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
 
     @Override
     public List<DailyRate> getExchangeRateHistory(Currency currency, ChartPeriod period) {
-        // 일별 데이터는 캐싱하지 않음 (별도의 @Cacheable로 처리 가능)
-        return delegate.getExchangeRateHistory(currency, period);
+        // L1: Redis 캐시 조회
+        List<DailyRate> cachedHistory = getHistoryFromRedisCache(currency, period);
+        if (cachedHistory != null && !cachedHistory.isEmpty()) {
+            log.debug("Cache HIT (Redis): {} - {}", currency, period.getCode());
+            return cachedHistory;
+        }
+
+        log.debug("Cache MISS (Redis): {} - {}", currency, period.getCode());
+
+        // Redis에 없으면 DB에서 조회
+        List<DailyRate> history = delegate.getExchangeRateHistory(currency, period);
+
+        // Redis에 캐싱
+        saveHistoryToRedisCache(currency, period, history);
+
+        return history;
     }
 
     /**
@@ -83,22 +87,40 @@ public class CachedExchangeRateProvider implements ExchangeRateProvider {
     }
 
     /**
-     * Redis에 환율 저장 (TTL Jitter 적용)
-     * Cache Stampede 방지를 위해 각 통화별로 다른 만료 시간 설정
+     * Redis에 환율 저장
      */
     private void saveToRedisCache(Currency currency, BigDecimal rate) {
         String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
+        redisTemplate.opsForValue().set(cacheKey, rate, ttlSeconds, TimeUnit.SECONDS);
+        log.debug("Saved to Redis: {} = {} (TTL: {}s)", currency, rate, ttlSeconds);
+    }
 
-        // TTL Jitter 계산 (±20% 분산)
-        long ttlWithJitter = cacheKeyGenerator.calculateTtlWithJitter(baseTtlSeconds, jitterPercentage);
+    /**
+     * Redis에서 차트 데이터 조회
+     */
+    private List<DailyRate> getHistoryFromRedisCache(Currency currency, ChartPeriod period) {
+        String cacheKey = cacheKeyGenerator.exchangeRateHistoryKey(currency.name(), period.getCode());
 
-        redisTemplate.opsForValue().set(cacheKey, rate, ttlWithJitter, TimeUnit.SECONDS);
+        try {
+            Object cached = redisTemplate.opsForValue().get(cacheKey);
+            if (cached instanceof List) {
+                return (List<DailyRate>) cached;
+            }
+        } catch (Exception e) {
+            // 역직렬화 실패 시 (타입 정보 없는 구 데이터) 캐시 삭제 후 null 반환
+            redisTemplate.delete(cacheKey);
+        }
 
-        log.debug("Saved to Redis: {} = {} (TTL: {}s, base: {}s, jitter: {}%)",
-            currency, rate, ttlWithJitter, baseTtlSeconds, (int)(jitterPercentage * 100));
+        return null;
+    }
 
-        // Stale 데이터도 저장 (Fallback용)
-        String staleKey = cacheKeyGenerator.staleDataKey(currency.name());
-        redisTemplate.opsForValue().set(staleKey, rate, staleTtlSeconds, TimeUnit.SECONDS);
+    /**
+     * Redis에 차트 데이터 저장
+     */
+    private void saveHistoryToRedisCache(Currency currency, ChartPeriod period, List<DailyRate> history) {
+        String cacheKey = cacheKeyGenerator.exchangeRateHistoryKey(currency.name(), period.getCode());
+        redisTemplate.opsForValue().set(cacheKey, history, ttlSeconds, TimeUnit.SECONDS);
+        log.debug("Saved history to Redis: {} - {} ({} points, TTL: {}s)",
+            currency, period.getCode(), history.size(), ttlSeconds);
     }
 }

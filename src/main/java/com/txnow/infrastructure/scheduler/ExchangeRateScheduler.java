@@ -4,11 +4,8 @@ import com.txnow.domain.exchange.model.Currency;
 import com.txnow.domain.exchange.model.ExchangeRateHistory;
 import com.txnow.domain.exchange.repository.ExchangeRateHistoryRepository;
 import com.txnow.infrastructure.external.bok.BokApiClient;
-import com.txnow.infrastructure.external.bok.BokApiResponse;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -35,24 +32,24 @@ public class ExchangeRateScheduler {
     @Scheduled(cron = "0 30 11 * * MON-FRI")
     @Transactional
     public void setDailyExchangeRates() {
-        log.info("Starting daily exchange rate synchronization...");
-
         LocalDate today = LocalDate.now();
 
         for (Currency currency : SUPPORTED_CURRENCIES) {
             if (!currency.isSupportedCurrency()) {
                 log.warn("Currency {} not supported by BOK API", currency);
-                return;
+                continue;
             }
 
-            String bokCode = currency.getBokCode();
-
             // 1. 오늘 환율 조회
-            BokApiResponse response = bokApiClient.getTodayExchangeRate(bokCode);
+            BigDecimal currentRate = bokApiClient.getCurrentExchangeRate(currency);
+
+            if (currentRate == null) {
+                log.warn("No exchange rate data available for {} (holiday or API unavailable)", currency);
+                continue;
+            }
 
             // 2. DB에서 전일 데이터 조회 (변동폭 계산용)
             LocalDate yesterday = today.minusDays(1);
-
             ExchangeRateHistory yesterdayRate = historyRepository
                 .findExchangeRateByTimestamp(
                     currency,
@@ -60,31 +57,24 @@ public class ExchangeRateScheduler {
                     yesterday.atTime(23, 59, 59)
                 );
 
-            // 3. 데이터 파싱 및 저장
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
-
-            for (var row : response.statisticSearch().rows()) {
-                LocalDate date = LocalDate.parse(row.time(), formatter);
-                BigDecimal rate = new BigDecimal(row.dataValue());
-                rate = currency.normalizeFromBokApi(rate);
-
-                // 4. 전일 대비 변동폭 계산
-                BigDecimal change = BigDecimal.ZERO;
-                if (yesterdayRate != null) {
-                    change = rate.subtract(yesterdayRate.getRate());
-                }
-
-                // 5. 저장
-                ExchangeRateHistory history = ExchangeRateHistory.builder()
-                    .currency(currency)
-                    .rate(rate)
-                    .change(change)
-                    .timestamp(date.atTime(11, 0))  // 오전 11시로 고정
-                    .build();
-
-                historyRepository.save(history);
+            // 3. 전일 대비 변동폭 계산
+            BigDecimal change = BigDecimal.ZERO;
+            if (yesterdayRate != null) {
+                change = currentRate.subtract(yesterdayRate.getRate());
             }
+
+            // 4. 저장
+            ExchangeRateHistory history = ExchangeRateHistory.builder()
+                .currency(currency)
+                .rate(currentRate)
+                .change(change)
+                .timestamp(today.atTime(11, 0))  // 오전 11시로 고정
+                .build();
+
+            historyRepository.save(history);
+            log.info("Saved exchange rate for {}: {}", currency, currentRate);
         }
 
+        log.info("Daily exchange rate synchronization completed");
     }
 }

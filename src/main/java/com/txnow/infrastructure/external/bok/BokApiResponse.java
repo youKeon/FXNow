@@ -7,7 +7,10 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record BokApiResponse(
     @JsonProperty("StatisticSearch")
-    StatisticSearch statisticSearch
+    StatisticSearch statisticSearch,
+
+    @JsonProperty("RESULT")
+    Result result  // 에러 응답용
 ) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -24,10 +27,10 @@ public record BokApiResponse(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Result(
-        @JsonProperty("RESULT_CODE")
+        @JsonProperty("CODE")
         String resultCode,
 
-        @JsonProperty("RESULT_MESSAGE")
+        @JsonProperty("MESSAGE")
         String resultMessage
     ) {}
 
@@ -39,4 +42,11 @@ public record BokApiResponse(
         @JsonProperty("TIME")
         String time
     ) {}
+
+    /**
+     * 에러 응답인지 확인
+     */
+    public boolean isError() {
+        return statisticSearch == null && result != null;
+    }
 }
