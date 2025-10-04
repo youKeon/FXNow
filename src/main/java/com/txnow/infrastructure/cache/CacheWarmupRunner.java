@@ -2,15 +2,18 @@ package com.txnow.infrastructure.cache;
 
 import com.txnow.domain.exchange.model.ChartPeriod;
 import com.txnow.domain.exchange.model.Currency;
-import com.txnow.infrastructure.provider.CachedExchangeRateProvider;
+import com.txnow.domain.exchange.model.DailyRate;
+import com.txnow.infrastructure.provider.DatabaseExchangeRateProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import org.springframework.data.redis.core.RedisTemplate;
 
 @Slf4j
@@ -18,9 +21,12 @@ import org.springframework.data.redis.core.RedisTemplate;
 @RequiredArgsConstructor
 public class CacheWarmupRunner implements ApplicationRunner {
 
-    private final CachedExchangeRateProvider cachedExchangeRateProvider;
+    private final DatabaseExchangeRateProvider databaseProvider;
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheKeyGenerator cacheKeyGenerator;
+
+    @Value("${cache.exchange-rate.ttl-seconds:86400}")
+    private long ttlSeconds;
 
     // 주요 통화 목록
     private static final List<Currency> MAJOR_CURRENCIES = List.of(
@@ -54,17 +60,24 @@ public class CacheWarmupRunner implements ApplicationRunner {
     }
 
     /**
-     * 주요 통화 환율 워밍업
+     * 주요 통화 환율 워밍업 (DB → Redis)
      */
     private void warmupExchangeRates() {
         for (Currency currency : MAJOR_CURRENCIES) {
-            BigDecimal rate = cachedExchangeRateProvider.getCurrentExchangeRate(currency);
-            log.debug("Warmed up: {} = {}", currency, rate);
+            try {
+                BigDecimal rate = databaseProvider.getCurrentExchangeRate(currency);
+                String cacheKey = cacheKeyGenerator.exchangeRateKey(currency.name());
+
+                redisTemplate.opsForValue().set(cacheKey, rate, ttlSeconds, TimeUnit.SECONDS);
+                log.debug("Warmed up exchange rate: {} = {}", currency, rate);
+            } catch (Exception e) {
+                log.warn("Failed to warmup exchange rate for {}: {}", currency, e.getMessage());
+            }
         }
     }
 
     /**
-     * 인기 차트 데이터 워밍업
+     * 인기 차트 데이터 워밍업 (DB → Redis)
      */
     private void warmupChartData() {
         log.info("Warming up chart data...");
@@ -74,9 +87,18 @@ public class CacheWarmupRunner implements ApplicationRunner {
 
         for (Currency currency : chartCurrencies) {
             for (ChartPeriod period : CHART_PERIODS) {
-                var chartData = cachedExchangeRateProvider.getExchangeRateHistory(currency, period);
-                log.debug("Warmed up chart: {} - {} ({} points)",
-                    currency, period.getCode(), chartData.size());
+                try {
+                    List<DailyRate> chartData = databaseProvider.getExchangeRateHistory(currency, period);
+                    String cacheKey = cacheKeyGenerator.exchangeRateHistoryKey(
+                        currency.name(), period.getCode());
+
+                    redisTemplate.opsForValue().set(cacheKey, chartData, ttlSeconds, TimeUnit.SECONDS);
+                    log.debug("Warmed up chart: {} - {} ({} points)",
+                        currency, period.getCode(), chartData.size());
+                } catch (Exception e) {
+                    log.warn("Failed to warmup chart for {} - {}: {}",
+                        currency, period.getCode(), e.getMessage());
+                }
             }
         }
     }

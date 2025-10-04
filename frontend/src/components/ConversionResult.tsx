@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { formatNumber } from '../utils/currencies';
 import { ARIA_LABELS } from '../constants/currency';
 import type { ConversionResult as ConversionResultType } from '../types';
@@ -10,7 +10,6 @@ interface ConversionResultProps {
   amount: string;
   fromCurrency: string;
   toCurrency: string;
-  previousRate: number | null;
   onRefresh: (e: React.MouseEvent) => void;
   isRefreshing: boolean;
   isLoading: boolean;
@@ -22,7 +21,6 @@ const ConversionResult: React.FC<ConversionResultProps> = ({
   amount,
   fromCurrency,
   toCurrency,
-  previousRate,
   onRefresh,
   isRefreshing,
   isLoading,
@@ -65,21 +63,9 @@ const ConversionResult: React.FC<ConversionResultProps> = ({
         </motion.button>
       </div>
       <div className="text-center space-y-1">
-        <div className="flex items-center justify-center gap-2">
-          <p className="text-sm text-gray-400">
-            1 {fromCurrency} = {result?.rate && !isNaN(result.rate) && isFinite(result.rate) ? formatNumber(result.rate) : '0'} {toCurrency}
-          </p>
-          {previousRate && result?.rate && previousRate !== result.rate && (
-            <div className={`flex items-center gap-1 text-xs font-medium ${result.rate > previousRate ? 'text-green-400' : 'text-red-400'}`}>
-              {result.rate > previousRate ? (
-                <TrendingUp className="h-3 w-3" />
-              ) : (
-                <TrendingDown className="h-3 w-3" />
-              )}
-              <span>{Math.abs(((result.rate - previousRate) / previousRate) * 100).toFixed(2)}%</span>
-            </div>
-          )}
-        </div>
+        <p className="text-sm text-gray-400">
+          1 {fromCurrency} = {result?.rate && !isNaN(result.rate) && isFinite(result.rate) ? formatNumber(result.rate) : '0'} {toCurrency}
+        </p>
         {result && !isRefreshing && (
           <div className="space-y-1">
             <p className="text-xs text-gray-500">

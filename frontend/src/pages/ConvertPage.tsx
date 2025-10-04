@@ -31,7 +31,6 @@ const CurrencyConverter: React.FC = () => {
   const [result, setResult] = useState<ConversionResultType | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [previousRate, setPreviousRate] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
@@ -43,9 +42,12 @@ const CurrencyConverter: React.FC = () => {
     resultRef.current = result;
   }, [result]);
 
-  const handleConvert = useCallback(async (formAmount?: string) => {
-    const currentAmount = formAmount || amount;
-    if (!currentAmount || isNaN(Number(currentAmount)) || Number(currentAmount) <= 0) {
+  const executeConversion = useCallback(async (
+    convertAmount: string,
+    sourceCurrency: string,
+    targetCurrency: string
+  ) => {
+    if (!convertAmount || isNaN(Number(convertAmount)) || Number(convertAmount) <= 0) {
       setError('');
       setResult(null);
       return;
@@ -55,51 +57,50 @@ const CurrencyConverter: React.FC = () => {
     setError('');
 
     try {
-      const apiResponse = await api.convertCurrency(Number(currentAmount), fromCurrency, toCurrency);
+      const apiResponse = await api.convertCurrency(Number(convertAmount), sourceCurrency, targetCurrency);
 
-      // API 응답에 요청 정보 추가
       const conversionResult: ConversionResultType = {
         convertedAmount: apiResponse.convertedAmount,
         rate: apiResponse.rate,
         timestamp: apiResponse.timestamp,
-        from: fromCurrency,
-        to: toCurrency,
-        amount: Number(currentAmount)
+        from: sourceCurrency,
+        to: targetCurrency,
+        amount: Number(convertAmount)
       };
 
-      // API 응답 검증
       if (isValidConversionResult(conversionResult)) {
-        setPreviousRate(resultRef.current?.rate || null);
         setResult(conversionResult);
         setIsDemoMode(false);
       }
     } catch (err) {
-      // API 실패 시 데모 데이터 사용
       console.warn('API failed, using demo data:', err);
       setIsDemoMode(true);
 
-      const rate = DEMO_RATES[fromCurrency]?.[toCurrency] || 1;
-      const convertedAmount = Number(currentAmount) * rate;
+      const rate = DEMO_RATES[sourceCurrency]?.[targetCurrency] || 1;
+      const convertedAmount = Number(convertAmount) * rate;
 
       const demoResult: ConversionResultType = {
-        convertedAmount: convertedAmount,
-        from: fromCurrency,
-        to: toCurrency,
-        amount: Number(currentAmount),
+        convertedAmount,
+        from: sourceCurrency,
+        to: targetCurrency,
+        amount: Number(convertAmount),
         rate,
         timestamp: new Date().toISOString()
       };
 
-      // 계산 결과가 유효한 경우에만 설정
       if (isValidConversionResult(demoResult)) {
-        setPreviousRate(resultRef.current?.rate || null);
         setResult(demoResult);
       }
-      setError(''); // 에러 메시지 제거
+      setError('');
     } finally {
       setIsLoading(false);
     }
-  }, [amount, fromCurrency, toCurrency]);
+  }, []);
+
+  const handleConvert = useCallback(async (formAmount?: string) => {
+    const currentAmount = formAmount || amount;
+    await executeConversion(currentAmount, fromCurrency, toCurrency);
+  }, [amount, fromCurrency, toCurrency, executeConversion]);
 
   const handleSwapCurrencies = useCallback(() => {
     const newFromCurrency = toCurrency;
@@ -108,26 +109,23 @@ const CurrencyConverter: React.FC = () => {
     setFromCurrency(newFromCurrency);
     setToCurrency(newToCurrency);
 
-    // 통화 변경 즉시 새로운 환율로 계산
-    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-      handleConvert(amount);
-    }
-  }, [toCurrency, fromCurrency, amount, handleConvert]);
+  }, [toCurrency, fromCurrency]);
 
-  // Auto-convert when currency changes (not amount - handled by debounce)
+  // Auto-convert when currency changes (amount changes are handled by debounce)
   useEffect(() => {
-    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-      handleConvert();
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+      setResult(null);
+      return;
     }
-  }, [fromCurrency, toCurrency, handleConvert]);
 
-  // Initial conversion on page load
-  useEffect(() => {
-    // 초기 로드 시 즉시 API 호출하여 환율 가져오기
-    if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-      handleConvert(amount);
-    }
-  }, []);
+    const timerId = window.setTimeout(() => {
+      executeConversion(amount, fromCurrency, toCurrency);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+    // amount intentionally omitted to avoid triggering on value edits (handled elsewhere)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromCurrency, toCurrency, executeConversion]);
 
   const handleAmountChange = useCallback((values: NumberFormatValues) => {
     const { value } = values;
@@ -221,9 +219,6 @@ const CurrencyConverter: React.FC = () => {
               value={fromCurrency}
               onChange={(newCurrency) => {
                 setFromCurrency(newCurrency);
-                if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-                  handleConvert(amount);
-                }
               }}
               label="From"
             />
@@ -249,9 +244,6 @@ const CurrencyConverter: React.FC = () => {
               value={toCurrency}
               onChange={(newCurrency) => {
                 setToCurrency(newCurrency);
-                if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-                  handleConvert(amount);
-                }
               }}
               label="To"
             />
@@ -280,7 +272,6 @@ const CurrencyConverter: React.FC = () => {
               amount={amount}
               fromCurrency={fromCurrency}
               toCurrency={toCurrency}
-              previousRate={previousRate}
               onRefresh={handleRefresh}
               isRefreshing={isRefreshing}
               isLoading={isLoading}
